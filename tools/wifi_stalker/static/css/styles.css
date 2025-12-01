@@ -102,7 +102,14 @@ header h1 {
 .subtitle {
     color: var(--text-secondary);
     font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.refresh-info {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
     margin-bottom: 1.5rem;
+    font-style: italic;
 }
 
 .status-bar {
@@ -765,6 +772,13 @@ code {
 
 .app-footer a:hover {
     text-decoration: underline;
+}
+
+.footer-disclaimer {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    margin-top: 0.5rem;
 }
 
 /* Responsive Design */

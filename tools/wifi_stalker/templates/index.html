@@ -26,6 +26,7 @@
             </div>
             <h1>📡 Wi-Fi Stalker</h1>
             <p class="subtitle">Track Wi-Fi clients through UniFi infrastructure</p>
+            <p class="refresh-info">Device status refreshes automatically every <span x-text="refreshInterval || 60"></span> seconds</p>
             <div class="status-bar">
                 <span class="status-item">
                     <span class="label">Last Refresh:</span>
@@ -54,9 +55,6 @@
                 </button>
                 <button @click="showConfig = true" class="btn btn-secondary">
                     ⚙️ UniFi Config
-                </button>
-                <button @click="loadDevices()" class="btn btn-secondary">
-                    🔄 Refresh
                 </button>
             </div>
 
@@ -662,7 +660,8 @@
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p><a href="https://github.com/Crosstalk-Solutions/unifi-toolkit" target="_blank">UI Toolkit - Wi-Fi Stalker</a> v0.6 | by <a href="https://www.crosstalksolutions.com" target="_blank">Crosstalk Solutions</a></p>
+            <p><a href="https://github.com/Crosstalk-Solutions/unifi-toolkit" target="_blank">UI Toolkit - Wi-Fi Stalker</a> v0.7.0 | by <a href="https://www.crosstalksolutions.com" target="_blank">Crosstalk Solutions</a></p>
+            <p class="footer-disclaimer">Not affiliated with Ubiquiti Inc. UniFi is a trademark of Ubiquiti Inc.</p>
         </footer>
     </div>
 

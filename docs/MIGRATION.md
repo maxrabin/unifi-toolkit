@@ -44,7 +44,7 @@ The easiest approach is to start fresh with UI Toolkit and re-add your devices.
    sudo systemctl stop wifi-stalker
 
    # If running with Docker
-   docker-compose down
+   docker compose down
 
    # If running manually
    # Press Ctrl+C in the terminal
@@ -52,7 +52,7 @@ The easiest approach is to start fresh with UI Toolkit and re-add your devices.
 
 2. **Clone UI Toolkit**:
    ```bash
-   git clone https://github.com/Crosstalk-Solutions/unifi-toolkit.git
+   git clone git@github.com:Crosstalk-Solutions/unifi-toolkit.git
    cd unifi-toolkit
    ```
 
@@ -82,7 +82,7 @@ The easiest approach is to start fresh with UI Toolkit and re-add your devices.
 
    **Docker:**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 5. **Access the application**:
@@ -231,7 +231,7 @@ Should show:
 pip install -r requirements.txt
 
 # Or rebuild Docker image
-docker-compose build --no-cache
+docker compose build --no-cache
 ```
 
 ### Port Conflicts
@@ -250,7 +250,7 @@ If migration fails, you can rollback:
 
 1. **Stop UI Toolkit**:
    ```bash
-   docker-compose down
+   docker compose down
    # or
    # Press Ctrl+C if running natively
    ```
@@ -260,7 +260,7 @@ If migration fails, you can rollback:
    cd ~/path/to/old/wifi-stalker
    python run.py
    # or
-   docker-compose up -d
+   docker compose up -d
    ```
 
 3. **Restore database backup** (if you made one):
@@ -278,7 +278,7 @@ If you encounter issues during migration:
 4. Include:
    - Migration method used (Option 1, 2, or 3)
    - Error messages
-   - Logs from `docker-compose logs` or console output
+   - Logs from `docker compose logs` or console output
 
 ## Future Migrations
 
@@ -297,8 +297,8 @@ python run.py
 
 Or with Docker:
 ```bash
-docker-compose pull
-docker-compose up -d
+docker compose pull
+docker compose up -d
 ```
 
 The toolkit handles tool additions automatically with no data loss.

@@ -14,6 +14,7 @@ function dashboard() {
         lastRefresh: null,
         trackedCount: 0,
         connectedCount: 0,
+        refreshInterval: 60,
         unifiClients: [],
         unifiClientSearch: '',
         selectedClients: new Set(),
@@ -201,6 +202,9 @@ function dashboard() {
                 const data = await response.json();
                 this.devices = data.devices;
                 console.log(`Loaded ${this.devices.length} devices`);
+
+                // Also refresh status to keep counts in sync
+                await this.loadStatus();
             } catch (error) {
                 console.error('Failed to load devices:', error);
                 this.showToast('Failed to load devices', 'error');
@@ -217,6 +221,7 @@ function dashboard() {
                 this.lastRefresh = this.formatDateTime(data.last_refresh);
                 this.trackedCount = data.tracked_devices;
                 this.connectedCount = data.connected_devices;
+                this.refreshInterval = data.refresh_interval_seconds || 60;
             } catch (error) {
                 console.error('Failed to load status:', error);
             }

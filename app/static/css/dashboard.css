@@ -112,6 +112,21 @@ body {
     margin-bottom: 1rem;
 }
 
+.tool-icon-image {
+    font-size: inherit;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 72px;
+}
+
+.tool-icon-image img {
+    max-width: 200px;
+    max-height: 60px;
+    width: auto;
+    height: auto;
+}
+
 .tool-card h2 {
     font-size: 1.75rem;
     margin-bottom: 1rem;
@@ -257,6 +272,13 @@ body {
     justify-content: center;
     gap: 1rem;
     flex-wrap: wrap;
+}
+
+.footer-disclaimer {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    margin-top: 1rem;
 }
 
 /* Theme Toggle */

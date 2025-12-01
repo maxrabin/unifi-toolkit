@@ -4,14 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**UI Toolkit** (v1.1.0) is a comprehensive monorepo containing multiple tools for UniFi network management and monitoring. Each tool operates independently but shares common infrastructure for UniFi API access, database management, and configuration.
+**UI Toolkit** (v1.2.0) is a comprehensive monorepo containing multiple tools for UniFi network management and monitoring. Each tool operates independently but shares common infrastructure for UniFi API access, database management, and configuration.
 
 **Current Tools:**
-- **Wi-Fi Stalker v0.6.0** - Track specific client devices, monitor roaming, and maintain connection history
+- **Wi-Fi Stalker v0.7.0** - Track specific client devices, monitor roaming, and maintain connection history
 
 **Planned Tools:**
 - **IDS Monitor** - View IDS/IPS events, blocked IPs, and security alerts
-- **Product Recommender** - AI-powered UniFi equipment recommendations
+
+**External Tools (linked from dashboard):**
+- **UI Product Selector** - External site at uiproductselector.com for UniFi product recommendations
+
+## Legal Disclaimer
+
+The footer of both the main dashboard and Wi-Fi Stalker includes a disclaimer:
+> "This project is not affiliated with, endorsed by, or sponsored by Ubiquiti Inc. UniFi is a trademark of Ubiquiti Inc."
+
+This must remain in all public-facing pages.
 
 ## Branding
 

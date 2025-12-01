@@ -23,10 +23,12 @@ from tools.wifi_stalker.models import (
     HistoryListResponse,
     SuccessResponse,
     UniFiClientInfo,
-    UniFiClientsResponse
+    UniFiClientsResponse,
+    SystemStatus
 )
 from tools.wifi_stalker.routers.config import get_unifi_client
-from tools.wifi_stalker.scheduler import refresh_single_device
+from tools.wifi_stalker.scheduler import refresh_single_device, get_last_refresh
+from shared.config import get_settings
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
