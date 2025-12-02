@@ -26,11 +26,19 @@
                     <h1>UI Toolkit</h1>
                 </div>
                 <div class="header-right">
-                    <div class="theme-toggle">
-                        <span class="theme-toggle-label" id="theme-label">Light</span>
-                        <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode">
-                            <span id="theme-icon">🌙</span>
-                        </button>
+                    <div class="header-actions">
+                        {% if auth_enabled %}
+                        <a href="/logout" class="logout-btn" title="Logout">
+                            <span class="logout-icon">🚪</span>
+                            <span class="logout-label">Logout</span>
+                        </a>
+                        {% endif %}
+                        <div class="theme-toggle">
+                            <span class="theme-toggle-label" id="theme-label">Light</span>
+                            <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode">
+                                <span id="theme-icon">🌙</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -246,7 +254,7 @@
 
                 <div class="tool-card">
                     <div class="tool-icon tool-icon-image">
-                        <img src="/static/images/ui-product-selector-logo.png" alt="UI Product Selector">
+                        <img src="/static/images/ui-product-selector-logo-280x80.png" alt="UI Product Selector">
                     </div>
                     <h2>UI Product Selector</h2>
                     <p class="tool-description">
@@ -261,6 +269,7 @@
                     <div class="tool-actions">
                         <a href="https://uiproductselector.com" target="_blank" class="btn btn-primary">Open UI Product Selector</a>
                     </div>
+                    <div class="tool-version">&nbsp;</div>
                 </div>
             </div>
 

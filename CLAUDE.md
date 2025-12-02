@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**UI Toolkit** (v1.2.0) is a comprehensive monorepo containing multiple tools for UniFi network management and monitoring. Each tool operates independently but shares common infrastructure for UniFi API access, database management, and configuration.
+**UI Toolkit** (v1.3.0) is a comprehensive monorepo containing multiple tools for UniFi network management and monitoring. Each tool operates independently but shares common infrastructure for UniFi API access, database management, configuration, and authentication.
 
 **Current Tools:**
 - **Wi-Fi Stalker v0.7.0** - Track specific client devices, monitor roaming, and maintain connection history
@@ -12,6 +12,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **External Tools (linked from dashboard):**
 - **UI Product Selector** - External site at uiproductselector.com for UniFi product recommendations
+
+## Deployment Modes
+
+The application supports two deployment modes:
+
+### Local Mode (default)
+- No authentication required
+- Access via `http://localhost:8000`
+- Suitable for trusted LAN environments
+- Set `DEPLOYMENT_TYPE=local` in `.env`
+
+### Production Mode
+- Session-based authentication with bcrypt password hashing
+- HTTPS via Caddy with automatic Let's Encrypt certificates
+- Rate limiting (5 failed login attempts = 5 minute lockout)
+- Access via `https://your-domain.com`
+- Set `DEPLOYMENT_TYPE=production` in `.env`
+
+## Setup Wizard
+
+The project includes an interactive setup wizard (`setup.sh`) that:
+- Generates the encryption key automatically
+- Prompts for deployment type (local/production)
+- For production: collects domain, username, and password
+- Validates password policy (12+ chars, uppercase, lowercase, numbers)
+- Creates the `.env` file with all required settings
+
+Run with: `./setup.sh`
+
+## Authentication System
+
+Located in `app/routers/auth.py`:
+
+- **Session-based**: Uses secure cookies with 7-day expiration
+- **Rate limiting**: 5 failed attempts triggers 5-minute lockout per IP
+- **Middleware**: `AuthMiddleware` protects all routes in production mode
+- **Login page**: Branded login at `/login` with dark mode support
+- **Logout**: `/logout` clears session and redirects to login
+
+The auth system is transparent in local mode (no login required).
 
 ## Legal Disclaimer
 
@@ -48,10 +88,14 @@ The application supports dark/light mode toggle:
 unifi-toolkit/
 ├── app/                    # Main unified application
 │   ├── main.py            # FastAPI app entry point, mounts all tools
+│   ├── routers/           # Main app routers
+│   │   └── auth.py        # Authentication (login, logout, middleware)
 │   ├── static/            # Main dashboard static files
 │   │   ├── css/           # Dashboard styles (includes dark mode)
 │   │   └── images/        # Branding assets (logo, favicon)
 │   └── templates/         # Main dashboard templates
+│       ├── dashboard.html # Main dashboard
+│       └── login.html     # Login page (production mode)
 ├── shared/                # Shared infrastructure (all tools use this)
 │   ├── config.py          # Pydantic settings (loads from .env)
 │   ├── crypto.py          # Fernet encryption for credentials
@@ -85,10 +129,16 @@ unifi-toolkit/
 │   ├── env.py            # Migration environment
 │   └── versions/         # Migration scripts
 ├── docs/                  # Documentation
+│   ├── INSTALLATION.md   # Complete installation guide
+│   ├── QUICKSTART.md     # Quick start reference
+│   └── MIGRATION.md      # Migration from standalone wifi-stalker
 ├── data/                  # Runtime data (database, logs)
+├── setup.sh               # Interactive setup wizard
+├── reset_password.sh      # Password reset utility
 ├── run.py                 # Application entry point
 ├── requirements.txt       # Python dependencies
 ├── .env.example           # Configuration template
+├── Caddyfile              # Caddy reverse proxy config (production)
 └── docker-compose.yml     # Docker deployment
 ```
 

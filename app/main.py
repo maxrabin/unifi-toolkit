@@ -3,6 +3,7 @@ UI Toolkit - Unified FastAPI Application
 
 This is the main application that mounts all available tools as sub-applications.
 """
+import os
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -18,6 +19,9 @@ from tools.wifi_stalker.main import create_app as create_stalker_app
 from tools.wifi_stalker.scheduler import start_scheduler, stop_scheduler
 from tools.threat_watch.main import create_app as create_threat_watch_app
 from tools.threat_watch.scheduler import start_scheduler as start_threat_scheduler, stop_scheduler as stop_threat_scheduler
+
+# Import authentication router and middleware
+from app.routers.auth import router as auth_router, AuthMiddleware, is_auth_enabled
 
 # Configure logging
 logging.basicConfig(
@@ -40,6 +44,13 @@ async def lifespan(app: FastAPI):
     logger.info("Starting UI Toolkit...")
     settings = get_settings()
     logger.info(f"Log level: {settings.log_level}")
+
+    # Log deployment mode
+    deployment_type = os.getenv("DEPLOYMENT_TYPE", "local")
+    if deployment_type == "production":
+        logger.info("Running in PRODUCTION mode - authentication enabled")
+    else:
+        logger.info("Running in LOCAL mode - authentication disabled")
 
     # Initialize database
     logger.info("Initializing database...")
@@ -81,9 +92,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="UI Toolkit",
     description="Comprehensive toolkit for UniFi network management and monitoring",
-    version="1.1.0",
+    version="1.3.0",
     lifespan=lifespan
 )
+
+# Add authentication middleware (must be added before routes)
+app.add_middleware(AuthMiddleware)
+
+# Include authentication router
+app.include_router(auth_router)
 
 # Mount Wi-Fi Stalker sub-application
 stalker_app = create_stalker_app()
@@ -104,7 +121,10 @@ async def root(request: Request):
     """
     return templates.TemplateResponse(
         "dashboard.html",
-        {"request": request}
+        {
+            "request": request,
+            "auth_enabled": is_auth_enabled()
+        }
     )
 
 

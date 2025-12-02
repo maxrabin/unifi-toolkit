@@ -7,16 +7,29 @@ services:
       dockerfile: Dockerfile
     container_name: unifi-toolkit
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    environment:
+      # Core settings (loaded from .env)
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:///./data/unifi_toolkit.db}
+      # Deployment settings
+      - DEPLOYMENT_TYPE=${DEPLOYMENT_TYPE:-local}
+      - AUTH_USERNAME=${AUTH_USERNAME:-}
+      - AUTH_PASSWORD_HASH=${AUTH_PASSWORD_HASH:-}
+      # UniFi settings (optional)
+      - UNIFI_CONTROLLER_URL=${UNIFI_CONTROLLER_URL:-}
+      - UNIFI_USERNAME=${UNIFI_USERNAME:-}
+      - UNIFI_PASSWORD=${UNIFI_PASSWORD:-}
+      - UNIFI_API_KEY=${UNIFI_API_KEY:-}
+      - UNIFI_SITE_ID=${UNIFI_SITE_ID:-default}
+      - UNIFI_VERIFY_SSL=${UNIFI_VERIFY_SSL:-false}
+      # Tool settings
+      - STALKER_REFRESH_INTERVAL=${STALKER_REFRESH_INTERVAL:-60}
     volumes:
       # Persist database and data
       - ./data:/app/data
       # Mount .env file for configuration
       - ./.env:/app/.env:ro
-    environment:
-      # Override these in .env file or docker-compose.override.yml
-      - LOG_LEVEL=INFO
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
       interval: 30s
@@ -25,6 +38,37 @@ services:
       start_period: 40s
     networks:
       - unifi-toolkit-network
+    # In local mode, expose port directly
+    # In production mode, Caddy handles external access
+    ports:
+      - "${APP_PORT:-8000}:8000"
+
+  # Caddy reverse proxy with automatic HTTPS
+  # Only runs when using production profile: docker-compose --profile production up
+  caddy:
+    image: caddy:2-alpine
+    container_name: unifi-toolkit-caddy
+    profiles: ["production"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - unifi-toolkit-network
+    depends_on:
+      - unifi-toolkit
+
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
 
 networks:
   unifi-toolkit-network:

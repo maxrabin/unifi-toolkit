@@ -66,17 +66,32 @@ if __name__ == "__main__":
     print("Starting UI Toolkit...")
     print("=" * 70)
     print()
-    print(f"Version: 1.2.0")
+    print(f"Version: 1.3.0")
     print(f"Log Level: {settings.log_level}")
     print(f"Database: {settings.database_url}")
     print()
+
+    # Display deployment mode
+    deployment_type = settings.deployment_type.upper()
+    if deployment_type == "PRODUCTION":
+        print(f"Deployment: PRODUCTION (authentication enabled)")
+        if settings.domain:
+            print(f"Domain: {settings.domain}")
+    else:
+        print(f"Deployment: LOCAL (authentication disabled)")
+    print()
+
     print("Available tools:")
     print("  - Wi-Fi Stalker v0.7.0")
     print("  - Threat Watch v0.1.0")
     print()
-    print("Access the dashboard at: http://localhost:8000")
-    print("Wi-Fi Stalker at: http://localhost:8000/stalker/")
-    print("Threat Watch at: http://localhost:8000/threats/")
+
+    if deployment_type == "PRODUCTION":
+        print("Access via your configured domain with HTTPS")
+    else:
+        print("Access the dashboard at: http://localhost:8000")
+        print("Wi-Fi Stalker at: http://localhost:8000/stalker/")
+        print("Threat Watch at: http://localhost:8000/threats/")
     print()
     print("Press Ctrl+C to stop the server")
     print("=" * 70)

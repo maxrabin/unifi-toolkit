@@ -12,6 +12,12 @@ class ToolkitSettings(BaseSettings):
     # Required
     encryption_key: str
 
+    # Deployment settings
+    deployment_type: str = "local"  # "local" or "production"
+    domain: Optional[str] = None
+    auth_username: str = "admin"
+    auth_password_hash: Optional[str] = None
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/unifi_toolkit.db"
 

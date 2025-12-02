@@ -1,125 +1,303 @@
 # UI Toolkit
 
-A suite of tools for UniFi network management.
+A comprehensive suite of tools for UniFi network management and monitoring.
 
 > **Note:** This project is not affiliated with, endorsed by, or sponsored by Ubiquiti Inc. UniFi is a trademark of Ubiquiti Inc.
 
-## Dashboard
+## Features
 
-The main dashboard displays real-time system status including:
-- **Gateway Info** - Model name, firmware version, uptime
+### Dashboard
+Real-time system status including:
+- **Gateway Info** - Model, firmware, uptime
 - **Resource Usage** - CPU and RAM utilization
-- **Network Health** - Status of WAN, LAN, WLAN, VPN subsystems with reasons for any warnings
-- **Connected Clients** - Wired and wireless client counts
-- **WAN Status** - IP address, ISP, latency, uptime percentage (supports multi-WAN)
-- **Speedtest** - Trigger speedtest and view results (where supported by gateway)
-
-The status widget has a condensed view with an expandable accordion for full details.
-
-## Tools
+- **Network Health** - WAN, LAN, WLAN, VPN status with diagnostic reasons
+- **Connected Clients** - Wired and wireless counts
+- **WAN Status** - IP, ISP, latency, uptime (supports multi-WAN)
+- **Speedtest** - On-demand speed testing (where supported)
 
 ### Wi-Fi Stalker
-Track specific Wi-Fi client devices through UniFi infrastructure. Monitor connection status, detect roaming between access points, and maintain historical logs.
-
-**Features:** Device tracking, roaming detection, connection history, webhooks (Slack/Discord/n8n)
+Track specific Wi-Fi client devices through your UniFi infrastructure.
+- Device tracking by MAC address
+- Roaming detection between access points
+- Connection history with timestamps
+- Webhook alerts (Slack, Discord, n8n)
 
 ### Threat Watch
-Monitor IDS/IPS events from your UniFi gateway. View blocked threats, analyze attack patterns, and configure webhook alerts.
-
-**Features:** Event monitoring, threat categorization, source/destination analysis, webhooks (Slack/Discord/n8n)
+Monitor IDS/IPS security events from your UniFi gateway.
+- Real-time event monitoring
+- Threat categorization and analysis
+- Top attackers and targets
+- Webhook alerts (Slack, Discord, n8n)
 
 ### UI Product Selector *(External)*
 Build the perfect UniFi network at [uiproductselector.com](https://uiproductselector.com)
 
+---
+
 ## Quick Start
 
 ### Requirements
-- Python 3.9-3.12 (3.13+ not supported yet)
-- UniFi Controller (any version)
+- **Docker** (recommended) or Python 3.9-3.12
+- **Ubuntu 22.04/24.04** (or other Linux)
+- Access to UniFi Controller
 
-### Installation
+### Local Deployment (LAN Only)
+
+No authentication, access via `http://localhost:8000`
 
 ```bash
-git clone git@github.com:Crosstalk-Solutions/unifi-toolkit.git
+# Install Docker
+sudo apt update && sudo apt install -y docker.io docker-compose
+sudo usermod -aG docker $USER && newgrp docker
+
+# Clone and setup
+git clone https://github.com/CrosstalkSolutions/unifi-toolkit.git
 cd unifi-toolkit
+./setup.sh  # Select 1 for Local
 
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-pip install -r requirements.txt
-
-cp .env.example .env
+# Start
+docker-compose up -d
 ```
 
-Generate an encryption key and add it to `.env`:
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
+Access at **http://localhost:8000**
 
-Start the application:
-```bash
-python run.py
-```
+### Production Deployment (Internet-Facing)
 
-Access at `http://localhost:8000`
-
-### Docker
+Authentication enabled, HTTPS with Let's Encrypt via Caddy
 
 ```bash
-git clone git@github.com:Crosstalk-Solutions/unifi-toolkit.git
+# Install Docker
+sudo apt update && sudo apt install -y docker.io docker-compose
+sudo usermod -aG docker $USER && newgrp docker
+
+# Clone and setup
+git clone https://github.com/CrosstalkSolutions/unifi-toolkit.git
 cd unifi-toolkit
+./setup.sh  # Select 2 for Production
+# Enter: domain name, admin username, password
 
-cp .env.example .env
-# Add ENCRYPTION_KEY to .env
+# Open firewall ports
+sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
 
-docker compose up -d
+# Start with HTTPS
+docker-compose --profile production up -d
 ```
+
+Access at **https://your-domain.com**
+
+---
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [INSTALLATION.md](docs/INSTALLATION.md) | Complete installation guide with troubleshooting |
+| [QUICKSTART.md](docs/QUICKSTART.md) | 5-minute quick start reference |
+| [MIGRATION.md](docs/MIGRATION.md) | Migrating from standalone Wi-Fi Stalker |
+
+---
+
+## Common Commands
+
+| Action | Command |
+|--------|---------|
+| Start (local) | `docker-compose up -d` |
+| Start (production) | `docker-compose --profile production up -d` |
+| Stop | `docker-compose down` |
+| View logs | `docker-compose logs -f` |
+| Restart | `docker-compose restart` |
+| Reset password | `./reset_password.sh` |
+| Update | `git pull && docker-compose build && docker-compose up -d` |
+
+---
 
 ## Configuration
 
-### Required
-- `ENCRYPTION_KEY` - Encrypts UniFi credentials (generate with command above)
+### Setup Wizard (Recommended)
 
-### Optional
-UniFi settings can be configured via `.env` or the web UI:
+Run the interactive setup wizard:
+
+```bash
+./setup.sh
+```
+
+The wizard will:
+- Generate encryption key
+- Configure deployment mode (local/production)
+- Set up authentication (production only)
+- Create your `.env` file
+
+### Manual Configuration
+
+Copy and edit the example configuration:
+
+```bash
+cp .env.example .env
+```
+
+#### Required Settings
+
+| Variable | Description |
+|----------|-------------|
+| `ENCRYPTION_KEY` | Encrypts stored credentials (auto-generated by setup wizard) |
+
+#### Deployment Settings (Production Only)
+
+| Variable | Description |
+|----------|-------------|
+| `DEPLOYMENT_TYPE` | `local` or `production` |
+| `DOMAIN` | Your domain name (e.g., `toolkit.example.com`) |
+| `AUTH_USERNAME` | Admin username |
+| `AUTH_PASSWORD_HASH` | Bcrypt password hash (generated by setup wizard) |
+
+#### UniFi Controller Settings
+
+Configure via `.env` or the web UI (web UI takes precedence):
 
 | Variable | Description |
 |----------|-------------|
 | `UNIFI_CONTROLLER_URL` | Controller URL (e.g., `https://192.168.1.1`) |
 | `UNIFI_USERNAME` | Username (legacy controllers) |
 | `UNIFI_PASSWORD` | Password (legacy controllers) |
-| `UNIFI_API_KEY` | API key (UniFi OS devices: UDM, UCG) |
+| `UNIFI_API_KEY` | API key (UniFi OS: UDM, UCG, Cloud Key) |
 | `UNIFI_SITE_ID` | Site ID (default: `default`) |
 | `UNIFI_VERIFY_SSL` | SSL verification (default: `false`) |
+
+#### Tool Settings
+
+| Variable | Description |
+|----------|-------------|
 | `STALKER_REFRESH_INTERVAL` | Device refresh interval in seconds (default: `60`) |
+
+---
+
+## Security
+
+### Authentication
+
+- **Local mode**: No authentication (trusted LAN only)
+- **Production mode**: Session-based authentication with bcrypt password hashing
+- **Rate limiting**: 5 failed login attempts = 5 minute lockout
+
+### HTTPS
+
+Production deployments use Caddy for automatic HTTPS:
+- Let's Encrypt certificates (auto-renewed)
+- HTTP to HTTPS redirect
+- Security headers (HSTS, X-Frame-Options, etc.)
+
+### Multi-Site Networking
+
+When managing multiple UniFi sites, always use site-to-site VPN:
+
+```
+✅ RECOMMENDED: VPN Connection
+┌──────────────────┐         ┌──────────────────┐
+│  UI Toolkit      │◄──VPN──►│  Remote UniFi    │
+│  Server          │         │  Controller      │
+└──────────────────┘         └──────────────────┘
+
+❌ AVOID: Direct Internet Exposure
+Never expose UniFi controllers via port forwarding
+```
+
+**VPN Options:** UniFi Site-to-Site, WireGuard, Tailscale, IPSec
+
+---
 
 ## Troubleshooting
 
-**Can't connect to UniFi controller**
+### Can't connect to UniFi controller
 - Set `UNIFI_VERIFY_SSL=false` for self-signed certificates
 - UniFi OS devices (UDM, UCG) require an API key, not username/password
+- Verify network connectivity to controller
 
-**Device not showing as online**
-- Wait 60 seconds for refresh
-- Verify MAC address is correct
-- Check device is connected in UniFi dashboard
+### Device not showing as online
+- Wait 60 seconds for the next refresh cycle
+- Verify MAC address format is correct
+- Confirm device is connected in UniFi dashboard
 
-**Docker issues**
-- Verify `.env` contains `ENCRYPTION_KEY`
-- Check logs: `docker compose logs`
+### Let's Encrypt certificate fails
+- Verify DNS A record points to your server
+- Ensure ports 80 and 443 are open
+- Check Caddy logs: `docker-compose logs caddy`
 
-## Migrating from Wi-Fi Stalker
+### Rate limited on login
+- Wait 5 minutes for lockout to expire
+- Use `./reset_password.sh` if you forgot your password
 
-See [docs/MIGRATION.md](docs/MIGRATION.md) for migration instructions from the standalone wifi-stalker application.
+### Docker issues
+- Verify `.env` exists and contains `ENCRYPTION_KEY`
+- Check logs: `docker-compose logs -f`
+- Rebuild: `docker-compose build && docker-compose up -d`
+
+---
+
+## Running with Python (Alternative to Docker)
+
+```bash
+# Clone repository
+git clone https://github.com/CrosstalkSolutions/unifi-toolkit.git
+cd unifi-toolkit
+
+# Create virtual environment (Python 3.9-3.12 only, NOT 3.13+)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run setup wizard
+./setup.sh
+
+# Start application
+python run.py
+```
+
+---
+
+## Project Structure
+
+```
+unifi-toolkit/
+├── app/                    # Main application
+│   ├── main.py            # FastAPI entry point
+│   ├── routers/           # API routes (auth)
+│   ├── static/            # CSS, images
+│   └── templates/         # HTML templates
+├── tools/                 # Individual tools
+│   ├── wifi_stalker/      # Wi-Fi Stalker tool
+│   └── threat_watch/      # Threat Watch tool
+├── shared/                # Shared infrastructure
+│   ├── config.py          # Settings management
+│   ├── database.py        # SQLAlchemy setup
+│   ├── unifi_client.py    # UniFi API wrapper
+│   └── crypto.py          # Credential encryption
+├── docs/                  # Documentation
+├── data/                  # Database (created at runtime)
+├── setup.sh               # Setup wizard
+├── reset_password.sh      # Password reset utility
+├── Caddyfile              # Reverse proxy config
+├── docker-compose.yml     # Docker configuration
+└── requirements.txt       # Python dependencies
+```
+
+---
 
 ## Support
 
-- Issues: https://github.com/Crosstalk-Solutions/unifi-toolkit/issues
+- **Issues**: [GitHub Issues](https://github.com/CrosstalkSolutions/unifi-toolkit/issues)
+- **Documentation**: [docs/](docs/)
+
+---
 
 ## Credits
 
 Developed by [Crosstalk Solutions](https://www.crosstalksolutions.com/)
+
 - YouTube: [@CrosstalkSolutions](https://www.youtube.com/@CrosstalkSolutions)
+
+---
 
 ## License
 
