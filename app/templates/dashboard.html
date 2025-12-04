@@ -27,12 +27,6 @@
                 </div>
                 <div class="header-right">
                     <div class="header-actions">
-                        {% if auth_enabled %}
-                        <a href="/logout" class="logout-btn" title="Logout">
-                            <span class="logout-icon">🚪</span>
-                            <span class="logout-label">Logout</span>
-                        </a>
-                        {% endif %}
                         <div class="theme-toggle">
                             <span class="theme-toggle-label" id="theme-label">Light</span>
                             <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode">
@@ -42,6 +36,12 @@
                         <button class="settings-btn" id="settings-btn" title="UniFi Settings">
                             <span class="settings-icon">⚙️</span>
                         </button>
+                        {% if auth_enabled %}
+                        <a href="/logout" class="logout-btn" title="Logout">
+                            <span class="logout-icon">🚪</span>
+                            <span class="logout-label">Logout</span>
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
