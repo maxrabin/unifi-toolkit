@@ -142,11 +142,18 @@ async def root(request: Request):
     """
     Main dashboard - shows available tools
     """
+    from app import __version__ as app_version
+    from tools.wifi_stalker import __version__ as stalker_version
+    from tools.threat_watch import __version__ as threat_watch_version
+
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
-            "auth_enabled": is_auth_enabled()
+            "auth_enabled": is_auth_enabled(),
+            "app_version": app_version,
+            "stalker_version": stalker_version,
+            "threat_watch_version": threat_watch_version
         }
     )
 
@@ -156,12 +163,13 @@ async def health_check():
     """
     Health check endpoint for monitoring
     """
+    from app import __version__ as app_version
     from tools.wifi_stalker import __version__ as stalker_version
     from tools.threat_watch import __version__ as threat_watch_version
 
     return {
         "status": "healthy",
-        "version": "1.5.0",
+        "version": app_version,
         "tools": {
             "wifi_stalker": stalker_version,
             "threat_watch": threat_watch_version
