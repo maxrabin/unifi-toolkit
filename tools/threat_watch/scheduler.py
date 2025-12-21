@@ -219,14 +219,14 @@ async def refresh_threat_events():
                 logger.error(f"Failed to decrypt UniFi credentials: {e}")
                 return
 
+            # is_unifi_os is auto-detected during connection
             unifi_client = UniFiClient(
                 host=unifi_config.controller_url,
                 username=unifi_config.username,
                 password=password,
                 api_key=api_key,
                 site=unifi_config.site_id,
-                verify_ssl=unifi_config.verify_ssl,
-                is_unifi_os=unifi_config.is_unifi_os if not api_key else None
+                verify_ssl=unifi_config.verify_ssl
             )
 
             # Connect to UniFi controller

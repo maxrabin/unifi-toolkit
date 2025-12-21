@@ -27,7 +27,8 @@ class UniFiConfigCreate(BaseModel):
     api_key: Optional[str] = Field(None, description="API key for UniFi OS (UDM, UCG, etc.)")
     site_id: str = Field(default="default", description="UniFi site ID")
     verify_ssl: bool = Field(default=False, description="Verify SSL certificate")
-    is_unifi_os: bool = Field(default=False, description="Enable for UniFi OS devices (UDM, UDR, UCG, UX)")
+    # Deprecated: is_unifi_os is now auto-detected during connection
+    is_unifi_os: Optional[bool] = Field(default=None, description="Deprecated - auto-detected during connection")
 
 
 class UniFiConfigResponse(BaseModel):
@@ -103,6 +104,9 @@ async def save_unifi_config(
     result = await db.execute(select(UniFiConfig).where(UniFiConfig.id == 1))
     existing_config = result.scalar_one_or_none()
 
+    # is_unifi_os is auto-detected during connection, default to False for storage
+    is_unifi_os = config.is_unifi_os if config.is_unifi_os is not None else False
+
     if existing_config:
         # Update existing config
         existing_config.controller_url = config.controller_url
@@ -111,7 +115,7 @@ async def save_unifi_config(
         existing_config.api_key_encrypted = encrypted_api_key
         existing_config.site_id = config.site_id
         existing_config.verify_ssl = config.verify_ssl
-        existing_config.is_unifi_os = config.is_unifi_os
+        existing_config.is_unifi_os = is_unifi_os
     else:
         # Create new config
         new_config = UniFiConfig(
@@ -122,7 +126,7 @@ async def save_unifi_config(
             api_key_encrypted=encrypted_api_key,
             site_id=config.site_id,
             verify_ssl=config.verify_ssl,
-            is_unifi_os=config.is_unifi_os
+            is_unifi_os=is_unifi_os
         )
         db.add(new_config)
 
@@ -177,14 +181,14 @@ async def test_unifi_credentials(config: UniFiConfigCreate):
         )
 
     # Create UniFi client with provided credentials
+    # is_unifi_os is auto-detected during connection
     client = UniFiClient(
         host=config.controller_url,
         username=config.username,
         password=config.password,
         api_key=config.api_key,
         site=config.site_id,
-        verify_ssl=config.verify_ssl,
-        is_unifi_os=config.is_unifi_os if not config.api_key else None  # Auto-detect if API key provided
+        verify_ssl=config.verify_ssl
     )
 
     test_result = await client.test_connection()
@@ -224,14 +228,14 @@ async def test_saved_unifi_connection(
         )
 
     # Create UniFi client and test connection
+    # is_unifi_os is auto-detected during connection
     client = UniFiClient(
         host=config.controller_url,
         username=config.username,
         password=password,
         api_key=api_key,
         site=config.site_id,
-        verify_ssl=config.verify_ssl,
-        is_unifi_os=config.is_unifi_os if not api_key else None  # Auto-detect if API key provided
+        verify_ssl=config.verify_ssl
     )
 
     test_result = await client.test_connection()
@@ -282,23 +286,19 @@ async def check_gateway_availability(
             error=f"Failed to decrypt credentials: {str(e)}"
         )
 
-    # Check if this is a legacy controller (not UniFi OS and no API key)
-    # Legacy controllers don't expose IDS/IPS API endpoints
-    is_legacy_controller = not config.is_unifi_os and not api_key
-
     # Create UniFi client and check for gateway
+    # is_unifi_os is auto-detected during connection
     client = UniFiClient(
         host=config.controller_url,
         username=config.username,
         password=password,
         api_key=api_key,
         site=config.site_id,
-        verify_ssl=config.verify_ssl,
-        is_unifi_os=config.is_unifi_os if not api_key else None  # Auto-detect if API key provided
+        verify_ssl=config.verify_ssl
     )
 
     try:
-        # Connect to controller
+        # Connect to controller (auto-detects UniFi OS vs legacy)
         connected = await client.connect()
         if not connected:
             return GatewayCheckResponse(
@@ -311,7 +311,10 @@ async def check_gateway_availability(
         # Get gateway info including IDS/IPS support
         gateway_info = await client.get_gateway_info()
 
+        # Check if this is a legacy controller (detected during connection)
         # Legacy controllers don't expose IDS/IPS API regardless of gateway hardware
+        is_legacy_controller = not client.is_unifi_os
+
         if is_legacy_controller:
             gateway_name = gateway_info.get("gateway_name", "Unknown")
             return GatewayCheckResponse(

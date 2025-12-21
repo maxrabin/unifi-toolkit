@@ -140,14 +140,16 @@ class UniFiClient:
         Initialize UniFi client
 
         Args:
-            host: UniFi controller URL (e.g., https://192.168.1.1:8443)
-            username: UniFi username (legacy auth or UniFi OS auth)
-            password: UniFi password (legacy auth or UniFi OS auth)
-            api_key: UniFi API key (UniFi OS auth)
+            host: UniFi controller URL (e.g., https://192.168.1.1 for UniFi OS,
+                  or https://192.168.1.1:8443 for legacy self-hosted)
+            username: UniFi username
+            password: UniFi password
+            api_key: UniFi API key (UniFi OS only)
             site: UniFi site ID (default: "default")
             verify_ssl: Whether to verify SSL certificates
-            is_unifi_os: Force UniFi OS mode (True for UDM/UDR/UCG/UX devices)
-                         If None, auto-detects based on API key presence
+            is_unifi_os: Deprecated - auto-detected during connect().
+                         If API key provided, assumes UniFi OS.
+                         Otherwise, tries UniFi OS first, falls back to legacy.
         """
         self.host = host.rstrip('/')  # Remove trailing slash if present
         self.username = username
@@ -157,15 +159,17 @@ class UniFiClient:
         self.verify_ssl = verify_ssl
         self.controller: Optional[Controller] = None
         self._session: Optional[aiohttp.ClientSession] = None
-        # UniFi OS mode: explicit setting, or auto-detect if API key present
-        if is_unifi_os is not None:
-            self.is_unifi_os = is_unifi_os
-        else:
-            self.is_unifi_os = api_key is not None
+        # UniFi OS mode: will be auto-detected during connect()
+        # API key always means UniFi OS; otherwise we'll probe during connect
+        self.is_unifi_os = api_key is not None
+        self._detected_type: Optional[str] = None  # Track what we detected
 
     async def connect(self) -> bool:
         """
-        Connect to the UniFi controller
+        Connect to the UniFi controller with auto-detection.
+
+        For username/password auth, tries UniFi OS first, falls back to legacy.
+        For API key auth, uses UniFi OS directly.
 
         Returns:
             True if connection successful, False otherwise
@@ -173,7 +177,7 @@ class UniFiClient:
         try:
             logger.debug(f"Attempting to connect to UniFi controller at {self.host}")
             logger.debug(f"Authentication method: {'API Key' if self.api_key else 'Username/Password'}")
-            logger.debug(f"UniFi OS mode: {self.is_unifi_os}, Site: {self.site}, Verify SSL: {self.verify_ssl}")
+            logger.debug(f"Site: {self.site}, Verify SSL: {self.verify_ssl}")
 
             # Create SSL context
             ssl_context = None
@@ -198,86 +202,143 @@ class UniFiClient:
                 cookie_jar=aiohttp.CookieJar(unsafe=True)
             )
 
-            if self.is_unifi_os:
-                if self.api_key:
-                    # UniFi OS with API key - test connection
-                    test_url = f"{self.host}/proxy/network/api/s/{self.site}/stat/device"
-                    async with self._session.get(test_url) as resp:
-                        if resp.status != 200:
-                            logger.error(f"UniFi OS API key connection failed: {resp.status}")
-                            await self.disconnect()
-                            return False
-                    logger.info(f"Successfully connected to UniFi OS (API key) at {self.host}")
-                    return True
-                else:
-                    # UniFi OS with username/password - login via /api/auth/login
-                    login_url = f"{self.host}/api/auth/login"
-                    login_payload = {
-                        "username": self.username,
-                        "password": self.password,
-                        "remember": True
-                    }
+            # API key auth - always UniFi OS
+            if self.api_key:
+                return await self._connect_unifi_os_api_key()
 
-                    async with self._session.post(login_url, json=login_payload) as resp:
-                        if resp.status != 200:
-                            # Try to get error message
-                            try:
-                                error_data = await resp.json()
-                                error_msg = error_data.get('errors', [error_data.get('message', 'Unknown error')])
-                                logger.error(f"UniFi OS login failed: {resp.status} - {error_msg}")
-                            except:
-                                logger.error(f"UniFi OS login failed: {resp.status}")
-                            await self.disconnect()
-                            return False
+            # Username/password - try UniFi OS first, fall back to legacy
+            logger.debug("Trying UniFi OS authentication first...")
+            unifi_os_result = await self._try_unifi_os_login()
 
-                        # Get CSRF token from response headers or cookies for future requests
-                        csrf_token = resp.headers.get('X-CSRF-Token')
-                        if csrf_token:
-                            self._session.headers.update({'X-CSRF-Token': csrf_token})
-
-                    # Test the connection by getting devices
-                    test_url = f"{self.host}/proxy/network/api/s/{self.site}/stat/device"
-                    async with self._session.get(test_url) as resp:
-                        if resp.status != 200:
-                            logger.error(f"UniFi OS API test failed after login: {resp.status}")
-                            await self.disconnect()
-                            return False
-
-                    logger.info(f"Successfully connected to UniFi OS (username/password) at {self.host}")
-                    return True
-            else:
-                # Legacy - use aiounifi Controller with Configuration object
-                # Parse host and port from URL
-                parsed = urlparse(self.host)
-                host = parsed.hostname or self.host
-                port = parsed.port or 8443
-
-                logger.debug(f"Using legacy controller mode - host: {host}, port: {port}")
-                logger.debug(f"Username: {self.username}")
-
-                # Create Configuration object (aiounifi v85+ API)
-                config = Configuration(
-                    session=self._session,
-                    host=host,
-                    username=self.username,
-                    password=self.password,
-                    port=port,
-                    site=self.site,
-                    ssl_context=ssl_context if ssl_context else False
-                )
-
-                self.controller = Controller(config)
-
-                # Login to controller
-                logger.debug("Attempting aiounifi controller login...")
-                await self.controller.login()
-                logger.info(f"Successfully connected to UniFi controller at {self.host}")
+            if unifi_os_result == "success":
+                self.is_unifi_os = True
+                self._detected_type = "unifi_os"
+                logger.info(f"Successfully connected to UniFi OS at {self.host}")
                 return True
+            elif unifi_os_result == "auth_failed":
+                # UniFi OS endpoint exists but credentials are wrong - don't try legacy
+                logger.error("UniFi OS authentication failed - invalid credentials")
+                await self.disconnect()
+                return False
+
+            # UniFi OS endpoint not found (404) - try legacy controller
+            logger.debug("UniFi OS endpoint not found, trying legacy controller...")
+            legacy_result = await self._try_legacy_login(ssl_context)
+
+            if legacy_result:
+                self.is_unifi_os = False
+                self._detected_type = "legacy"
+                logger.info(f"Successfully connected to legacy controller at {self.host}")
+                return True
+
+            logger.error("Failed to connect - neither UniFi OS nor legacy authentication worked")
+            await self.disconnect()
+            return False
 
         except Exception as e:
             logger.error(f"Failed to connect to UniFi controller: {e}")
             logger.debug(f"Connection error details - Type: {type(e).__name__}, Args: {e.args}")
             await self.disconnect()
+            return False
+
+    async def _connect_unifi_os_api_key(self) -> bool:
+        """Connect to UniFi OS using API key authentication."""
+        test_url = f"{self.host}/proxy/network/api/s/{self.site}/stat/device"
+        try:
+            async with self._session.get(test_url) as resp:
+                if resp.status != 200:
+                    logger.error(f"UniFi OS API key connection failed: {resp.status}")
+                    await self.disconnect()
+                    return False
+            self.is_unifi_os = True
+            self._detected_type = "unifi_os_api_key"
+            logger.info(f"Successfully connected to UniFi OS (API key) at {self.host}")
+            return True
+        except Exception as e:
+            logger.error(f"UniFi OS API key connection error: {e}")
+            await self.disconnect()
+            return False
+
+    async def _try_unifi_os_login(self) -> str:
+        """
+        Try to login via UniFi OS endpoint.
+
+        Returns:
+            "success" - Login successful
+            "auth_failed" - Endpoint exists but credentials wrong
+            "not_found" - Endpoint doesn't exist (not UniFi OS)
+        """
+        login_url = f"{self.host}/api/auth/login"
+        login_payload = {
+            "username": self.username,
+            "password": self.password,
+            "remember": True
+        }
+
+        try:
+            async with self._session.post(login_url, json=login_payload) as resp:
+                if resp.status == 404:
+                    logger.debug("UniFi OS login endpoint not found (404)")
+                    return "not_found"
+
+                if resp.status != 200:
+                    # Try to get error message
+                    try:
+                        error_data = await resp.json()
+                        error_msg = error_data.get('errors', [error_data.get('message', 'Unknown error')])
+                        logger.debug(f"UniFi OS login failed: {resp.status} - {error_msg}")
+                    except:
+                        logger.debug(f"UniFi OS login failed: {resp.status}")
+                    return "auth_failed"
+
+                # Get CSRF token from response headers for future requests
+                csrf_token = resp.headers.get('X-CSRF-Token')
+                if csrf_token:
+                    self._session.headers.update({'X-CSRF-Token': csrf_token})
+
+            # Test the connection by getting devices
+            test_url = f"{self.host}/proxy/network/api/s/{self.site}/stat/device"
+            async with self._session.get(test_url) as resp:
+                if resp.status != 200:
+                    logger.debug(f"UniFi OS API test failed after login: {resp.status}")
+                    return "auth_failed"
+
+            return "success"
+
+        except aiohttp.ClientError as e:
+            logger.debug(f"UniFi OS connection error: {e}")
+            return "not_found"
+
+    async def _try_legacy_login(self, ssl_context) -> bool:
+        """Try to login via legacy controller (aiounifi)."""
+        try:
+            # Parse host and port from URL
+            parsed = urlparse(self.host)
+            host = parsed.hostname or self.host
+            port = parsed.port or 8443
+
+            logger.debug(f"Using legacy controller mode - host: {host}, port: {port}")
+
+            # Create Configuration object (aiounifi v85+ API)
+            config = Configuration(
+                session=self._session,
+                host=host,
+                username=self.username,
+                password=self.password,
+                port=port,
+                site=self.site,
+                ssl_context=ssl_context if ssl_context else False
+            )
+
+            self.controller = Controller(config)
+
+            # Login to controller
+            logger.debug("Attempting aiounifi controller login...")
+            await self.controller.login()
+            return True
+
+        except Exception as e:
+            logger.debug(f"Legacy controller login failed: {e}")
             return False
 
     async def disconnect(self):
@@ -346,7 +407,11 @@ class UniFiClient:
                                 # Wired device fields
                                 'is_wired': is_wired,
                                 'sw_mac': client.get('sw_mac'),
-                                'sw_port': client.get('sw_port')
+                                'sw_port': client.get('sw_port'),
+                                # Network/SSID for wireless
+                                'essid': client.get('essid'),
+                                'network': client.get('network'),
+                                'network_id': client.get('network_id')
                             }
 
                     return clients_dict
@@ -392,7 +457,11 @@ class UniFiClient:
                             'blocked': client.get('blocked', False),
                             'is_wired': is_wired,
                             'sw_mac': client.get('sw_mac'),
-                            'sw_port': client.get('sw_port')
+                            'sw_port': client.get('sw_port'),
+                            # Network/SSID for wireless
+                            'essid': client.get('essid'),
+                            'network': client.get('network'),
+                            'network_id': client.get('network_id')
                         }
 
                 return clients_dict
@@ -1170,6 +1239,225 @@ class UniFiClient:
             }
         finally:
             await self.disconnect()
+
+    async def get_site_stats(self, interval: str = "hourly", hours: int = 24) -> List[Dict]:
+        """
+        Get historical site bandwidth stats.
+
+        Args:
+            interval: "5minutes", "hourly", or "daily"
+            hours: How many hours of data to fetch (for 5minutes/hourly) or days (for daily)
+
+        Returns:
+            List of dicts with: time, wan_tx_bytes, wan_rx_bytes, num_sta
+        """
+        if not self._session:
+            raise RuntimeError("Not connected to UniFi controller. Call connect() first.")
+
+        try:
+            import time
+
+            # Calculate time range
+            now_ms = int(time.time() * 1000)
+            if interval == "daily":
+                # For daily, treat hours as days
+                start_ms = now_ms - (hours * 24 * 60 * 60 * 1000)
+            else:
+                start_ms = now_ms - (hours * 60 * 60 * 1000)
+
+            # Build request payload with attributes that might work on different controllers
+            payload = {
+                "attrs": ["bytes", "wan-tx_bytes", "wan-rx_bytes", "wlan_bytes", "time", "num_sta"],
+                "start": start_ms,
+                "end": now_ms
+            }
+
+            # Map interval to endpoint name
+            interval_map = {
+                "5minutes": "5minutes",
+                "hourly": "hourly",
+                "daily": "daily"
+            }
+            endpoint_interval = interval_map.get(interval, "hourly")
+
+            if self.is_unifi_os:
+                url = f"{self.host}/proxy/network/api/s/{self.site}/stat/report/{endpoint_interval}.site"
+            else:
+                url = f"{self.host}/api/s/{self.site}/stat/report/{endpoint_interval}.site"
+
+            logger.debug(f"Requesting site stats from: {url}")
+            logger.debug(f"Payload: {payload}")
+
+            async with self._session.post(url, json=payload) as resp:
+                if resp.status != 200:
+                    resp_text = await resp.text()
+                    logger.error(f"Failed to get site stats: {resp.status} - {resp_text}")
+                    return []
+
+                data = await resp.json()
+                stats_list = data.get('data', [])
+                logger.debug(f"Site stats response keys: {data.keys() if isinstance(data, dict) else 'not a dict'}")
+
+                if stats_list:
+                    logger.debug(f"First stat entry keys: {stats_list[0].keys() if stats_list else 'empty'}")
+                    logger.debug(f"First stat entry: {stats_list[0] if stats_list else 'empty'}")
+
+                # Normalize field names - handle both hyphen and underscore variants
+                result = []
+                for stat in stats_list:
+                    result.append({
+                        'time': stat.get('time'),
+                        'wan_tx_bytes': stat.get('wan-tx_bytes', stat.get('wan_tx_bytes', 0)),
+                        'wan_rx_bytes': stat.get('wan-rx_bytes', stat.get('wan_rx_bytes', 0)),
+                        'num_sta': stat.get('num_sta', 0)
+                    })
+
+                # Filter out entries without valid time
+                result = [r for r in result if r.get('time') is not None]
+                logger.debug(f"Retrieved {len(result)} {interval} site stats")
+                return result
+
+        except Exception as e:
+            logger.error(f"Failed to get site stats: {e}")
+            return []
+
+    async def get_hourly_bandwidth(self, hours: int = 24) -> List[Dict]:
+        """
+        Get WAN bandwidth for the last N hours.
+        Tries 5-minute intervals first (more commonly available), falls back to hourly.
+
+        Args:
+            hours: Number of hours of data to fetch (default: 24)
+
+        Returns:
+            List of dicts with: time, wan_tx_bytes, wan_rx_bytes, num_sta
+        """
+        # Try 5-minute interval first (limited to 12 hours typically)
+        result = await self.get_site_stats(interval="5minutes", hours=min(hours, 12))
+        if result:
+            return result
+
+        # Fall back to hourly
+        return await self.get_site_stats(interval="hourly", hours=hours)
+
+    async def get_ap_details(self) -> List[Dict]:
+        """
+        Get detailed AP statistics including client counts.
+
+        Returns:
+            List of dicts with: mac, name, model, num_sta, channel, tx_bytes, rx_bytes, state
+        """
+        if not self._session:
+            raise RuntimeError("Not connected to UniFi controller. Call connect() first.")
+
+        try:
+            if self.is_unifi_os:
+                url = f"{self.host}/proxy/network/api/s/{self.site}/stat/device"
+            else:
+                url = f"{self.host}/api/s/{self.site}/stat/device"
+
+            async with self._session.get(url) as resp:
+                if resp.status != 200:
+                    logger.error(f"Failed to get AP details: {resp.status}")
+                    return []
+
+                data = await resp.json()
+                devices = data.get('data', [])
+
+                # Filter for APs and extract relevant stats
+                aps = []
+                for device in devices:
+                    if device.get('type') == 'uap':
+                        model_code = device.get('model', '')
+
+                        # Get radio info for channel
+                        radio_table = device.get('radio_table', [])
+                        channels = []
+                        for radio in radio_table:
+                            channel = radio.get('channel')
+                            if channel:
+                                channels.append(str(channel))
+
+                        # Get stats
+                        stat = device.get('stat', {})
+
+                        aps.append({
+                            'mac': device.get('mac', '').lower(),
+                            'name': device.get('name') or get_friendly_model_name(model_code),
+                            'model': get_friendly_model_name(model_code),
+                            'model_code': model_code,
+                            'num_sta': device.get('num_sta', 0),
+                            'user_num_sta': device.get('user-num_sta', 0),
+                            'guest_num_sta': device.get('guest-num_sta', 0),
+                            'channels': ', '.join(channels) if channels else None,
+                            'tx_bytes': stat.get('tx_bytes', 0) if stat else 0,
+                            'rx_bytes': stat.get('rx_bytes', 0) if stat else 0,
+                            'state': device.get('state', 0),  # 1 = online, 0 = offline
+                            'uptime': device.get('uptime', 0),
+                            'satisfaction': device.get('satisfaction', None)
+                        })
+
+                logger.debug(f"Retrieved details for {len(aps)} APs")
+                return aps
+
+        except Exception as e:
+            logger.error(f"Failed to get AP details: {e}")
+            return []
+
+    async def get_top_clients(self, limit: int = 10) -> List[Dict]:
+        """
+        Get top N clients by bandwidth usage.
+
+        Args:
+            limit: Maximum number of clients to return (default: 10)
+
+        Returns:
+            List of dicts sorted by total bytes (tx + rx) descending
+        """
+        try:
+            clients = await self.get_clients()
+
+            # Calculate total bytes and prepare list
+            clients_with_totals = []
+            for mac, client in clients.items():
+                tx_bytes = client.get('tx_bytes', 0) or 0
+                rx_bytes = client.get('rx_bytes', 0) or 0
+                total_bytes = tx_bytes + rx_bytes
+
+                # Get display name (prefer name, then hostname, then MAC)
+                display_name = client.get('name') or client.get('hostname') or mac
+
+                clients_with_totals.append({
+                    'mac': mac,
+                    'name': display_name,
+                    'hostname': client.get('hostname'),
+                    'ip': client.get('ip'),
+                    'tx_bytes': tx_bytes,
+                    'rx_bytes': rx_bytes,
+                    'total_bytes': total_bytes,
+                    'rssi': client.get('rssi'),
+                    'signal': client.get('rssi'),  # alias for convenience
+                    'is_wired': client.get('is_wired', False),
+                    'ap_mac': client.get('ap_mac'),
+                    'uptime': client.get('uptime'),
+                    # Network info
+                    'essid': client.get('essid'),
+                    'network': client.get('network') or client.get('essid')  # Use network name or SSID
+                })
+
+            # Sort by total bytes descending and limit
+            sorted_clients = sorted(
+                clients_with_totals,
+                key=lambda x: x['total_bytes'],
+                reverse=True
+            )[:limit]
+
+            logger.debug(f"Returning top {len(sorted_clients)} clients by bandwidth")
+            return sorted_clients
+
+        except Exception as e:
+            logger.error(f"Failed to get top clients: {e}")
+            return []
 
     def __del__(self):
         """

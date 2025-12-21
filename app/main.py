@@ -19,6 +19,8 @@ from tools.wifi_stalker.main import create_app as create_stalker_app
 from tools.wifi_stalker.scheduler import start_scheduler, stop_scheduler
 from tools.threat_watch.main import create_app as create_threat_watch_app
 from tools.threat_watch.scheduler import start_scheduler as start_threat_scheduler, stop_scheduler as stop_threat_scheduler
+from tools.network_pulse.main import create_app as create_pulse_app
+from tools.network_pulse.scheduler import start_scheduler as start_pulse_scheduler, stop_scheduler as stop_pulse_scheduler
 
 # Import authentication router and middleware
 from app.routers.auth import router as auth_router, AuthMiddleware, is_auth_enabled
@@ -90,12 +92,22 @@ async def lifespan(app: FastAPI):
     await start_threat_scheduler()
     logger.info("Threat Watch scheduler started")
 
+    # Start Network Pulse scheduler
+    logger.info("Starting Network Pulse scheduler...")
+    await start_pulse_scheduler()
+    logger.info("Network Pulse scheduler started")
+
     logger.info("UI Toolkit started successfully")
 
     yield
 
     # Shutdown
     logger.info("Shutting down UI Toolkit...")
+
+    # Stop Network Pulse scheduler
+    logger.info("Stopping Network Pulse scheduler...")
+    await stop_pulse_scheduler()
+    logger.info("Network Pulse scheduler stopped")
 
     # Stop Threat Watch scheduler
     logger.info("Stopping Threat Watch scheduler...")
@@ -135,6 +147,10 @@ app.mount("/stalker", stalker_app)
 threat_watch_app = create_threat_watch_app()
 app.mount("/threats", threat_watch_app)
 
+# Mount Network Pulse sub-application
+pulse_app = create_pulse_app()
+app.mount("/pulse", pulse_app)
+
 # Mount main app static files (for dashboard)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
@@ -147,6 +163,7 @@ async def root(request: Request):
     from app import __version__ as app_version
     from tools.wifi_stalker import __version__ as stalker_version
     from tools.threat_watch import __version__ as threat_watch_version
+    from tools.network_pulse import __version__ as pulse_version
 
     return templates.TemplateResponse(
         "dashboard.html",
@@ -155,7 +172,8 @@ async def root(request: Request):
             "auth_enabled": is_auth_enabled(),
             "app_version": app_version,
             "stalker_version": stalker_version,
-            "threat_watch_version": threat_watch_version
+            "threat_watch_version": threat_watch_version,
+            "pulse_version": pulse_version
         }
     )
 
@@ -168,13 +186,15 @@ async def health_check():
     from app import __version__ as app_version
     from tools.wifi_stalker import __version__ as stalker_version
     from tools.threat_watch import __version__ as threat_watch_version
+    from tools.network_pulse import __version__ as pulse_version
 
     return {
         "status": "healthy",
         "version": app_version,
         "tools": {
             "wifi_stalker": stalker_version,
-            "threat_watch": threat_watch_version
+            "threat_watch": threat_watch_version,
+            "network_pulse": pulse_version
         }
     }
 
@@ -213,14 +233,14 @@ async def get_system_status():
             api_key = decrypt_api_key(config.api_key_encrypted)
 
         # Create client and get system info
+        # is_unifi_os is auto-detected during connection
         client = UniFiClient(
             host=config.controller_url,
             username=config.username,
             password=password,
             api_key=api_key,
             site=config.site_id,
-            verify_ssl=config.verify_ssl,
-            is_unifi_os=config.is_unifi_os if not api_key else None
+            verify_ssl=config.verify_ssl
         )
 
         try:

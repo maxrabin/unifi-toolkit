@@ -257,12 +257,14 @@ class ToolkitSettings(BaseSettings):
 
 ### UniFi Client (shared/unifi_client.py)
 
-Supports **two authentication methods**:
+Supports **two authentication methods** with **automatic detection**:
 
-1. **Legacy Controllers**: username + password (uses aiounifi.Controller)
-2. **UniFi OS (UCG, UDM, etc.)**: API key (direct HTTP calls)
+1. **UniFi OS (UCG, UDM, Cloud Key with UniFi OS)**: username/password or API key
+2. **Legacy Controllers (self-hosted)**: username + password (uses aiounifi.Controller)
 
-Auto-detects which method based on presence of `api_key`.
+**Auto-detection**: When using username/password, the client automatically tries UniFi OS authentication first (`/api/auth/login`). If that returns 404, it falls back to legacy controller authentication. API keys always use UniFi OS mode.
+
+Note: Cloud Key Gen2+ now runs UniFi OS on recent firmware, so it uses UniFi OS authentication (not legacy).
 
 Key methods:
 - `connect()` - Authenticate and connect
@@ -356,8 +358,9 @@ All mounted under `/stalker/api/`:
 - **Devices**: GET/POST/DELETE `/api/devices`
 - **Device Details**: GET `/api/devices/{id}/details`
 - **History**: GET `/api/devices/{id}/history`
-- **UniFi Config**: GET/POST `/api/config/unifi`
 - **Webhooks**: GET/POST/PUT/DELETE `/api/webhooks`
+
+Note: UniFi configuration is centralized at the dashboard level (`/api/config/unifi`), not in individual tools.
 
 See routers/*.py for full endpoint definitions.
 
@@ -421,7 +424,7 @@ To add a new tool to the toolkit:
 
 ```bash
 # Via API (with app running)
-curl http://localhost:8000/stalker/api/config/unifi/test
+curl http://localhost:8000/api/config/unifi/test
 ```
 
 ### Viewing Logs
@@ -482,7 +485,8 @@ The scheduler runs automatically, but to test immediately, restart the app (refr
 - Encryption key must be kept secure (in `.env`, not committed)
 - `.env` is gitignored by default
 - Database contains encrypted credentials
-- No user authentication (designed as single-user local app)
+- Authentication available in production mode (session-based with bcrypt)
+- Local mode has no authentication (designed for trusted LAN environments)
 - SSL verification can be disabled for self-signed UniFi certificates
 
 ## Troubleshooting Common Issues
@@ -495,7 +499,9 @@ The scheduler runs automatically, but to test immediately, restart the app (refr
 - Set `UNIFI_VERIFY_SSL=false` for self-signed certs
 - Verify controller URL is accessible
 - Test credentials in UniFi dashboard first
-- Check if using UniFi OS (need API key, not just password)
+- For UniFi OS (UDM, UCG, Cloud Key with recent firmware): use `https://IP` without port
+- For legacy self-hosted controllers: use `https://IP:8443`
+- Controller type is auto-detected; check DEBUG logs to see which auth method was attempted
 
 **Device not showing as online**:
 - Wait 60 seconds for next refresh
@@ -506,6 +512,12 @@ The scheduler runs automatically, but to test immediately, restart the app (refr
 **Python version errors**:
 - Must use Python 3.9-3.12 (not 3.13+)
 - Run `python --version` to check
+
+**SQLite errors after git pull** (e.g., "no such column", connection test works but save fails):
+- This happens when new code expects columns/tables that don't exist yet
+- Docker fix: `docker compose exec unifi-toolkit alembic upgrade head && docker compose restart`
+- Python fix: `source venv/bin/activate && alembic upgrade head`
+- Always run migrations after pulling new code
 
 ## File Naming Conventions
 

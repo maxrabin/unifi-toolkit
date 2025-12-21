@@ -290,19 +290,19 @@ Login with the credentials you configured during setup.
 2. Click the **Settings cog (⚙️)** in the dashboard header
 3. Enter your UniFi controller details:
 
-**For Legacy Controllers (CloudKey, self-hosted):**
-   - **Controller URL**: `https://192.168.1.1` or `https://cloudkey.local`
-   - **Username**: Your UniFi admin username
-   - **Password**: Your UniFi admin password
-   - **Site ID**: Usually `default` (or site name from URL)
-   - **Verify SSL**: Disable for self-signed certificates
+**Controller URL:**
+   - **UniFi OS devices** (UDM, UCG, Cloud Key with recent firmware): `https://192.168.1.1` (no port)
+   - **Self-hosted controllers**: `https://192.168.1.1:8443` (include port 8443)
 
-**For UniFi OS (UDM, UCG, UniFi OS Server):**
-   - **Controller URL**: Include port number, e.g., `https://192.168.1.1` or `https://unifiosserver.example.com:11443`
-   - **API Key**: Generate in Settings → Admins → Create API Token
-   - **Site ID**: Alphanumeric code from site URL (e.g., `7jnove4a` from `/network/7jnove4a/...`)
-   - **Verify SSL**: Disable for self-signed certificates
-   - **Note**: Leave username/password blank when using API key
+**Authentication (auto-detected):**
+   - **API Key (recommended for UniFi OS)**: Generate in UniFi OS Settings → Integrations → API Keys
+   - **Username/Password**: Works for all controller types - UI Toolkit auto-detects UniFi OS vs legacy
+
+**Other Settings:**
+   - **Site ID**: Usually `default`. For multi-site, use the alphanumeric code from the URL (e.g., `7jnove4a` from `/network/7jnove4a/...`)
+   - **Verify SSL**: Disable for self-signed certificates (most UniFi deployments)
+
+**Note**: Cloud Key Gen2+ now runs UniFi OS on recent firmware. Use the UniFi OS URL format (no port) for these devices.
 
 ### Test Connection
 
@@ -366,13 +366,10 @@ docker compose --profile production restart
 
 ## Updating
 
-### Update from Git
+### Update from Git (Docker)
 
 ```bash
 cd /opt/unifi-toolkit
-
-# Stop the application
-docker compose down
 
 # Pull latest changes
 git pull origin main
@@ -382,20 +379,31 @@ docker compose build
 docker compose up -d                          # Local mode
 # OR
 docker compose --profile production up -d     # Production mode
-```
 
-### Database Migrations
-
-If the update includes database changes:
-
-```bash
-# With Docker
+# Apply any database migrations (run this after every update)
 docker compose exec unifi-toolkit alembic upgrade head
 
-# With Python
-source venv/bin/activate
-alembic upgrade head
+# Restart to ensure changes take effect
+docker compose restart
 ```
+
+### Update from Git (Python/non-Docker)
+
+```bash
+cd /opt/unifi-toolkit
+source venv/bin/activate
+
+# Pull latest changes
+git pull origin main
+
+# Apply any database migrations
+alembic upgrade head
+
+# Restart the application
+python run.py
+```
+
+**Note:** Always run `alembic upgrade head` after pulling updates. Skipping this step can cause SQLite errors if the update includes database schema changes. See [Database Errors After Git Pull](#database-errors-after-git-pull) for troubleshooting.
 
 ---
 
@@ -446,9 +454,39 @@ If you see "Too many login attempts":
 - Wait 5 minutes for the lockout to expire
 - The countdown timer shows remaining time
 
-### Database Errors
+### Database Errors After Git Pull
 
-**Reset database (loses all data):**
+**Symptom:** SQLite errors like "no such column", "database schema mismatch", or the connection test works but saving fails.
+
+**Cause:** New code often includes database schema changes (new columns/tables). If you don't run migrations after pulling, the code expects columns that don't exist in your database.
+
+**Fix - Apply migrations (Docker):**
+```bash
+cd /opt/unifi-toolkit
+docker compose exec unifi-toolkit alembic upgrade head
+docker compose restart
+```
+
+**Fix - Apply migrations (Python/non-Docker):**
+```bash
+cd /opt/unifi-toolkit
+source venv/bin/activate
+alembic upgrade head
+python run.py
+```
+
+**Quick reference for Docker updates:**
+```bash
+cd /opt/unifi-toolkit
+git pull                                              # Pull latest code
+docker compose exec unifi-toolkit alembic upgrade head  # Apply migrations
+docker compose restart                                # Restart app
+```
+
+### Reset Database (Last Resort)
+
+**Warning:** This loses all tracked devices, history, and configuration.
+
 ```bash
 # Stop application
 docker compose down
@@ -456,7 +494,7 @@ docker compose down
 # Remove database
 rm -f data/unifi_toolkit.db
 
-# Restart
+# Restart (creates fresh database)
 docker compose up -d
 ```
 
@@ -565,4 +603,13 @@ cd /opt/unifi-toolkit
 sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
 docker compose --profile production up -d
 # Access: https://your-domain.com
+```
+
+### Updating (Docker)
+```bash
+cd /opt/unifi-toolkit
+git pull origin main
+docker compose build && docker compose up -d
+docker compose exec unifi-toolkit alembic upgrade head
+docker compose restart
 ```

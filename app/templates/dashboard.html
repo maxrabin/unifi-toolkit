@@ -226,25 +226,24 @@
                         </div>
 
                         <div class="auth-info-box">
-                            <strong>Authentication Method:</strong>
+                            <strong>Authentication:</strong>
                             <p>
-                                🔐 <strong>UniFi OS with API Key:</strong> UCG, UDM, UDR (newer firmware)<br>
-                                🔑 <strong>UniFi OS with Username/Password:</strong> UX, older UDM/UCG without API support<br>
-                                🔑 <strong>Legacy Controllers:</strong> Cloud Key, Self-hosted
+                                🔐 <strong>API Key (recommended):</strong> UCG, UDM, UDR, Cloud Key with UniFi OS<br>
+                                🔑 <strong>Username/Password:</strong> All controllers (auto-detects UniFi OS vs legacy)
                             </p>
                         </div>
 
                         <div class="form-group">
-                            <label for="api_key">API Key (for UniFi OS devices)</label>
+                            <label for="api_key">API Key</label>
                             <input type="password"
                                    id="api_key"
                                    name="api_key"
                                    placeholder="Enter API key from UniFi Settings > Integrations">
-                            <small>Leave blank if using username/password</small>
+                            <small>Found in UniFi OS: Settings → Integrations → API Keys. Leave blank if using username/password.</small>
                         </div>
 
                         <div class="form-group">
-                            <label for="username">Username (for legacy controllers)</label>
+                            <label for="username">Username</label>
                             <input type="text"
                                    id="username"
                                    name="username"
@@ -254,7 +253,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="password">Password (for legacy controllers)</label>
+                            <label for="password">Password</label>
                             <input type="password"
                                    id="password"
                                    name="password"
@@ -274,21 +273,11 @@
                         <div class="form-group">
                             <label>
                                 <input type="checkbox"
-                                       id="is_unifi_os"
-                                       name="is_unifi_os">
-                                UniFi OS Device (UDM, UDR, UCG, UX)
-                            </label>
-                            <small>Check this for built-in consoles using username/password (not API key)</small>
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox"
                                        id="verify_ssl"
                                        name="verify_ssl">
                                 Verify SSL Certificates
                             </label>
-                            <small>Uncheck for self-signed certificates</small>
+                            <small>Uncheck for self-signed certificates (most UniFi deployments)</small>
                         </div>
 
                         <div class="form-actions">
@@ -349,6 +338,25 @@
                     </div>
                     <div class="tool-status" id="threat-watch-status" style="display: none;"></div>
                     <div class="tool-version">v{{ threat_watch_version }}</div>
+                </div>
+
+                <!-- Network Pulse Tool -->
+                <div class="tool-card">
+                    <div class="tool-icon">💓</div>
+                    <h2>Network Pulse</h2>
+                    <p class="tool-description">
+                        Real-time network monitoring dashboard designed for always-on displays.
+                        View bandwidth, AP status, top clients, and network health at a glance.
+                    </p>
+                    <div class="tool-features">
+                        <span class="feature-badge">Live Stats</span>
+                        <span class="feature-badge">Client Usage</span>
+                        <span class="feature-badge">Fullscreen Mode</span>
+                    </div>
+                    <div class="tool-actions">
+                        <a href="/pulse/" class="btn btn-primary">Open Network Pulse</a>
+                    </div>
+                    <div class="tool-version">v{{ pulse_version }}</div>
                 </div>
 
                 <div class="tool-card">
@@ -751,7 +759,6 @@
                         document.getElementById('controller_url').value = config.controller_url || '';
                         document.getElementById('username').value = config.username || 'admin';
                         document.getElementById('site_id').value = config.site_id || 'default';
-                        document.getElementById('is_unifi_os').checked = config.is_unifi_os || false;
                         document.getElementById('verify_ssl').checked = config.verify_ssl || false;
                     }
                 } catch (error) {
@@ -770,7 +777,6 @@
                     password: formData.get('password') || null,
                     api_key: formData.get('api_key') || null,
                     site_id: formData.get('site_id') || 'default',
-                    is_unifi_os: formData.get('is_unifi_os') === 'on',
                     verify_ssl: formData.get('verify_ssl') === 'on'
                 };
 
@@ -843,7 +849,6 @@
                     password: formData.get('password') || null,
                     api_key: formData.get('api_key') || null,
                     site_id: formData.get('site_id') || 'default',
-                    is_unifi_os: formData.get('is_unifi_os') === 'on',
                     verify_ssl: formData.get('verify_ssl') === 'on'
                 };
 
