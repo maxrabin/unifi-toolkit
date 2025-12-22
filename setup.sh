@@ -65,13 +65,27 @@ check_python() {
     fi
 
     if [ "$MAJOR" -ge 3 ] && [ "$MINOR" -ge 13 ]; then
-        print_warning "Python $PYTHON_VERSION detected. This project requires Python 3.9-3.12."
-        print_info "Some dependencies may not work correctly with Python 3.13+."
+        print_error "Python $PYTHON_VERSION detected. This project requires Python 3.9-3.12."
         echo ""
-        read -p "Continue anyway? [y/N]: " continue_anyway
-        if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+        print_info "The aiounifi library does not support Python 3.13+."
+        echo ""
+        echo "To fix this, install Python 3.12:"
+        echo ""
+        echo "  Ubuntu/Debian:"
+        printf "    ${CYAN}sudo add-apt-repository ppa:deadsnakes/ppa${NC}\n"
+        printf "    ${CYAN}sudo apt update${NC}\n"
+        printf "    ${CYAN}sudo apt install python3.12 python3.12-venv python3.12-dev${NC}\n"
+        echo ""
+        echo "  Then create a virtual environment with Python 3.12:"
+        printf "    ${CYAN}python3.12 -m venv venv${NC}\n"
+        printf "    ${CYAN}source venv/bin/activate${NC}\n"
+        printf "    ${CYAN}pip install -r requirements.txt${NC}\n"
+        printf "    ${CYAN}./setup.sh${NC}\n"
+        echo ""
+        echo "  Alternatively, use Docker (which includes the correct Python version):"
+        printf "    ${CYAN}docker compose up -d${NC}\n"
+        echo ""
+        exit 1
     fi
 
     print_success "Python $PYTHON_VERSION detected"
