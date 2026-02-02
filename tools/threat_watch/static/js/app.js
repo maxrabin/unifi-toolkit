@@ -12,11 +12,13 @@ function dashboard() {
             mediumCount: 0,
             lowCount: 0,
             blockedCount: 0,
+            ignoredCount: 0,
             byCategory: [],
             topAttackers: []
         },
         categories: [],
         webhooks: [],
+        ignoreRules: [],
 
         // UI State
         isLoading: false,
@@ -24,6 +26,8 @@ function dashboard() {
         showWebhooks: false,
         showAddWebhook: false,
         showEditWebhook: false,
+        showAddIgnoreRule: false,
+        showEditIgnoreRule: false,
         showEventDetails: false,
         eventDetails: null,
 
@@ -40,7 +44,8 @@ function dashboard() {
             severity: '',
             action: '',
             category: '',
-            search: ''
+            search: '',
+            includeIgnored: false
         },
 
         // Sorting
@@ -63,6 +68,19 @@ function dashboard() {
             enabled: true
         },
 
+        // Ignore Rule Form
+        ignoreRuleForm: {
+            id: null,
+            ip_address: '',
+            description: '',
+            ignore_high: false,
+            ignore_medium: true,
+            ignore_low: true,
+            match_source: true,
+            match_destination: false,
+            enabled: true
+        },
+
         // Toast
         toast: {
             show: false,
@@ -82,6 +100,7 @@ function dashboard() {
             await this.loadStats();
             await this.loadCategories();
             await this.loadWebhooks();
+            await this.loadIgnoreRules();
             this.connectWebSocket();
 
             // Auto-refresh every minute
@@ -124,6 +143,7 @@ function dashboard() {
                 if (this.filters.action) params.append('action', this.filters.action);
                 if (this.filters.category) params.append('category', this.filters.category);
                 if (this.filters.search) params.append('search', this.filters.search);
+                if (this.filters.includeIgnored) params.append('include_ignored', 'true');
 
                 const response = await fetch(`/threats/api/events?${params}`);
                 if (response.ok) {
@@ -146,7 +166,10 @@ function dashboard() {
          */
         async loadStats() {
             try {
-                const response = await fetch('/threats/api/events/stats');
+                const params = new URLSearchParams();
+                if (this.filters.includeIgnored) params.append('include_ignored', 'true');
+
+                const response = await fetch(`/threats/api/events/stats?${params}`);
                 if (response.ok) {
                     const data = await response.json();
 
@@ -155,6 +178,7 @@ function dashboard() {
                     this.stats.mediumCount = data.by_severity.find(s => s.severity === 2)?.count || 0;
                     this.stats.lowCount = data.by_severity.find(s => s.severity === 3)?.count || 0;
                     this.stats.blockedCount = data.blocked_count || 0;
+                    this.stats.ignoredCount = data.ignored_count || 0;
 
                     this.stats.byCategory = data.by_category || [];
                     this.stats.topAttackers = data.top_attackers || [];
@@ -308,6 +332,137 @@ function dashboard() {
                 event_block: true,
                 enabled: true
             };
+        },
+
+        /**
+         * Load ignore rules
+         */
+        async loadIgnoreRules() {
+            try {
+                const response = await fetch('/threats/api/ignore-rules');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.ignoreRules = data.rules || [];
+                }
+            } catch (error) {
+                console.error('Failed to load ignore rules:', error);
+            }
+        },
+
+        /**
+         * Save ignore rule (create or update)
+         */
+        async saveIgnoreRule() {
+            try {
+                const isEdit = this.showEditIgnoreRule;
+                const method = isEdit ? 'PUT' : 'POST';
+                const url = isEdit
+                    ? `/threats/api/ignore-rules/${this.ignoreRuleForm.id}`
+                    : '/threats/api/ignore-rules';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(this.ignoreRuleForm)
+                });
+
+                if (response.ok) {
+                    this.showToast(isEdit ? 'Ignore rule updated' : 'Ignore rule created', 'success');
+                    this.showAddIgnoreRule = false;
+                    this.showEditIgnoreRule = false;
+                    this.resetIgnoreRuleForm();
+                    await this.loadIgnoreRules();
+                } else {
+                    const data = await response.json();
+                    this.showToast(data.detail || 'Failed to save ignore rule', 'error');
+                }
+            } catch (error) {
+                this.showToast('Failed to save ignore rule', 'error');
+            }
+        },
+
+        /**
+         * Edit ignore rule
+         */
+        editIgnoreRule(rule) {
+            this.ignoreRuleForm = {
+                id: rule.id,
+                ip_address: rule.ip_address,
+                description: rule.description || '',
+                ignore_high: rule.ignore_high,
+                ignore_medium: rule.ignore_medium,
+                ignore_low: rule.ignore_low,
+                match_source: rule.match_source,
+                match_destination: rule.match_destination,
+                enabled: rule.enabled
+            };
+            this.showEditIgnoreRule = true;
+        },
+
+        /**
+         * Delete ignore rule
+         */
+        async deleteIgnoreRule(id) {
+            if (!confirm('Are you sure you want to delete this ignore rule?')) return;
+
+            try {
+                const response = await fetch(`/threats/api/ignore-rules/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                if (response.ok) {
+                    this.showToast('Ignore rule deleted', 'success');
+                    await this.loadIgnoreRules();
+                } else {
+                    this.showToast('Failed to delete ignore rule', 'error');
+                }
+            } catch (error) {
+                this.showToast('Failed to delete ignore rule', 'error');
+            }
+        },
+
+        /**
+         * Reset ignore rule form
+         */
+        resetIgnoreRuleForm() {
+            this.ignoreRuleForm = {
+                id: null,
+                ip_address: '',
+                description: '',
+                ignore_high: false,
+                ignore_medium: true,
+                ignore_low: true,
+                match_source: true,
+                match_destination: false,
+                enabled: true
+            };
+        },
+
+        /**
+         * Quick-ignore from event details - opens form pre-filled with event's source IP
+         */
+        openIgnoreFromEvent() {
+            if (this.eventDetails && this.eventDetails.src_ip) {
+                this.ignoreRuleForm = {
+                    id: null,
+                    ip_address: this.eventDetails.src_ip,
+                    description: '',
+                    ignore_high: false,
+                    ignore_medium: true,
+                    ignore_low: true,
+                    match_source: true,
+                    match_destination: false,
+                    enabled: true
+                };
+                this.showEventDetails = false;
+                this.showAddIgnoreRule = true;
+            }
         },
 
         /**

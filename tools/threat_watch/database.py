@@ -61,6 +61,10 @@ class ThreatEvent(Base):
     archived = Column(Boolean, default=False, nullable=False)
     raw_data = Column(Text, nullable=True)  # Store full JSON for reference
 
+    # Ignore list tracking
+    ignored = Column(Boolean, default=False, nullable=False, index=True)
+    ignored_by_rule_id = Column(Integer, nullable=True)
+
     # When we fetched this event
     fetched_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -98,3 +102,34 @@ class ThreatWebhookConfig(Base):
 
     def __repr__(self):
         return f"<ThreatWebhookConfig(name={self.name}, type={self.webhook_type}, enabled={self.enabled})>"
+
+
+class ThreatIgnoreRule(Base):
+    """
+    Stores IP addresses to ignore for specific severity levels.
+    Allows filtering out noise from known devices (e.g., Home Assistant SNMP queries).
+    """
+    __tablename__ = "threats_ignore_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ip_address = Column(String, nullable=False, index=True)
+    description = Column(String, nullable=True)  # e.g., "Home Assistant"
+
+    # Severity levels to ignore (1=High, 2=Medium, 3=Low)
+    ignore_high = Column(Boolean, default=False, nullable=False)
+    ignore_medium = Column(Boolean, default=True, nullable=False)
+    ignore_low = Column(Boolean, default=True, nullable=False)
+
+    # Match configuration
+    match_source = Column(Boolean, default=True, nullable=False)       # Match when IP is src_ip
+    match_destination = Column(Boolean, default=False, nullable=False)  # Match when IP is dest_ip
+
+    enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Stats
+    events_ignored = Column(Integer, default=0, nullable=False)
+    last_matched = Column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<ThreatIgnoreRule(ip={self.ip_address}, enabled={self.enabled})>"

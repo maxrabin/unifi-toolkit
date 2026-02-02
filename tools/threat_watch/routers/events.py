@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from shared.database import get_db_session
-from tools.threat_watch.database import ThreatEvent
+from tools.threat_watch.database import ThreatEvent, ThreatIgnoreRule
 
 logger = logging.getLogger(__name__)
 from tools.threat_watch.models import (
@@ -22,7 +22,9 @@ from tools.threat_watch.models import (
     CategoryCount,
     CountryCount,
     TopAttacker,
-    TimelinePoint
+    TimelinePoint,
+    IgnoreRuleResponse,
+    SuccessResponse
 )
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -44,6 +46,7 @@ async def get_events(
     src_ip: Optional[str] = Query(None, description="Filter by source IP"),
     dest_ip: Optional[str] = Query(None, description="Filter by destination IP"),
     search: Optional[str] = Query(None, description="Search in signature/message"),
+    include_ignored: bool = Query(False, description="Include events that match ignore rules"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=500, description="Events per page"),
     db: AsyncSession = Depends(get_db_session)
@@ -57,6 +60,10 @@ async def get_events(
 
     # Apply filters
     filters = []
+
+    # By default, exclude ignored events unless include_ignored is True
+    if not include_ignored:
+        filters.append(ThreatEvent.ignored == False)
 
     if start_time:
         filters.append(ThreatEvent.timestamp >= start_time)
@@ -108,6 +115,7 @@ async def get_events(
 
 @router.get("/stats", response_model=ThreatStatsResponse)
 async def get_stats(
+    include_ignored: bool = Query(False, description="Include ignored events in stats"),
     db: AsyncSession = Depends(get_db_session)
 ):
     """
@@ -117,40 +125,61 @@ async def get_stats(
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
 
+    # Count of ignored events (always returned)
+    ignored_result = await db.execute(
+        select(func.count(ThreatEvent.id)).where(ThreatEvent.ignored == True)
+    )
+    ignored_count = ignored_result.scalar() or 0
+
+    # Base filter - exclude ignored events unless include_ignored is True
+    if include_ignored:
+        base_filters = []  # No filtering
+    else:
+        base_filters = [ThreatEvent.ignored == False]
+
     # Total events
-    total_result = await db.execute(select(func.count(ThreatEvent.id)))
+    total_query = select(func.count(ThreatEvent.id))
+    if base_filters:
+        total_query = total_query.where(*base_filters)
+    total_result = await db.execute(total_query)
     total_events = total_result.scalar() or 0
 
     # Events in last 24 hours
-    result_24h = await db.execute(
-        select(func.count(ThreatEvent.id)).where(ThreatEvent.timestamp >= day_ago)
-    )
+    query_24h = select(func.count(ThreatEvent.id)).where(ThreatEvent.timestamp >= day_ago)
+    if base_filters:
+        query_24h = query_24h.where(*base_filters)
+    result_24h = await db.execute(query_24h)
     events_24h = result_24h.scalar() or 0
 
     # Events in last 7 days
-    result_7d = await db.execute(
-        select(func.count(ThreatEvent.id)).where(ThreatEvent.timestamp >= week_ago)
-    )
+    query_7d = select(func.count(ThreatEvent.id)).where(ThreatEvent.timestamp >= week_ago)
+    if base_filters:
+        query_7d = query_7d.where(*base_filters)
+    result_7d = await db.execute(query_7d)
     events_7d = result_7d.scalar() or 0
 
     # Blocked vs Alert counts
-    blocked_result = await db.execute(
-        select(func.count(ThreatEvent.id)).where(ThreatEvent.action == "block")
-    )
+    blocked_query = select(func.count(ThreatEvent.id)).where(ThreatEvent.action == "block")
+    if base_filters:
+        blocked_query = blocked_query.where(*base_filters)
+    blocked_result = await db.execute(blocked_query)
     blocked_count = blocked_result.scalar() or 0
 
-    alert_result = await db.execute(
-        select(func.count(ThreatEvent.id)).where(ThreatEvent.action == "alert")
-    )
+    alert_query = select(func.count(ThreatEvent.id)).where(ThreatEvent.action == "alert")
+    if base_filters:
+        alert_query = alert_query.where(*base_filters)
+    alert_result = await db.execute(alert_query)
     alert_count = alert_result.scalar() or 0
 
     # By severity
-    severity_result = await db.execute(
+    severity_query = (
         select(ThreatEvent.severity, func.count(ThreatEvent.id))
         .where(ThreatEvent.severity.isnot(None))
-        .group_by(ThreatEvent.severity)
-        .order_by(ThreatEvent.severity)
     )
+    if base_filters:
+        severity_query = severity_query.where(*base_filters)
+    severity_query = severity_query.group_by(ThreatEvent.severity).order_by(ThreatEvent.severity)
+    severity_result = await db.execute(severity_query)
     by_severity = [
         SeverityCount(
             severity=sev,
@@ -161,33 +190,35 @@ async def get_stats(
     ]
 
     # By category (top 10)
-    category_result = await db.execute(
+    category_query = (
         select(ThreatEvent.category, func.count(ThreatEvent.id))
         .where(ThreatEvent.category.isnot(None))
-        .group_by(ThreatEvent.category)
-        .order_by(desc(func.count(ThreatEvent.id)))
-        .limit(10)
     )
+    if base_filters:
+        category_query = category_query.where(*base_filters)
+    category_query = category_query.group_by(ThreatEvent.category).order_by(desc(func.count(ThreatEvent.id))).limit(10)
+    category_result = await db.execute(category_query)
     by_category = [
         CategoryCount(category=cat or "Unknown", count=count)
         for cat, count in category_result.all()
     ]
 
     # By source country (top 10)
-    country_result = await db.execute(
+    country_query = (
         select(ThreatEvent.src_country, func.count(ThreatEvent.id))
         .where(ThreatEvent.src_country.isnot(None))
-        .group_by(ThreatEvent.src_country)
-        .order_by(desc(func.count(ThreatEvent.id)))
-        .limit(10)
     )
+    if base_filters:
+        country_query = country_query.where(*base_filters)
+    country_query = country_query.group_by(ThreatEvent.src_country).order_by(desc(func.count(ThreatEvent.id))).limit(10)
+    country_result = await db.execute(country_query)
     by_country = [
         CountryCount(country=country or "Unknown", country_code=country, count=count)
         for country, count in country_result.all()
     ]
 
     # Top attackers (top 10 source IPs)
-    attackers_result = await db.execute(
+    attackers_query = (
         select(
             ThreatEvent.src_ip,
             func.count(ThreatEvent.id).label('count'),
@@ -196,10 +227,11 @@ async def get_stats(
             func.max(ThreatEvent.timestamp).label('last_seen')
         )
         .where(ThreatEvent.src_ip.isnot(None))
-        .group_by(ThreatEvent.src_ip)
-        .order_by(desc(func.count(ThreatEvent.id)))
-        .limit(10)
     )
+    if base_filters:
+        attackers_query = attackers_query.where(*base_filters)
+    attackers_query = attackers_query.group_by(ThreatEvent.src_ip).order_by(desc(func.count(ThreatEvent.id))).limit(10)
+    attackers_result = await db.execute(attackers_query)
     top_attackers = [
         TopAttacker(
             ip=row.src_ip,
@@ -217,6 +249,7 @@ async def get_stats(
         events_7d=events_7d,
         blocked_count=blocked_count,
         alert_count=alert_count,
+        ignored_count=ignored_count,
         by_severity=by_severity,
         by_category=by_category,
         by_country=by_country,
@@ -299,6 +332,66 @@ async def get_event(
         raise HTTPException(status_code=404, detail="Event not found")
 
     return ThreatEventDetail.model_validate(event)
+
+
+@router.post("/{event_id}/ignore", response_model=IgnoreRuleResponse)
+async def ignore_event_ip(
+    event_id: int,
+    ignore_high: bool = Query(False, description="Ignore high severity events"),
+    ignore_medium: bool = Query(True, description="Ignore medium severity events"),
+    ignore_low: bool = Query(True, description="Ignore low severity events"),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Create an ignore rule from an event's source IP.
+    Quick way to add an IP to the ignore list directly from an event.
+    """
+    # Get the event
+    result = await db.execute(
+        select(ThreatEvent).where(ThreatEvent.id == event_id)
+    )
+    event = result.scalar_one_or_none()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if not event.src_ip:
+        raise HTTPException(status_code=400, detail="Event has no source IP")
+
+    # At least one severity must be selected
+    if not (ignore_high or ignore_medium or ignore_low):
+        raise HTTPException(
+            status_code=400,
+            detail="At least one severity level must be selected to ignore."
+        )
+
+    # Check if rule already exists for this IP
+    existing = await db.execute(
+        select(ThreatIgnoreRule).where(ThreatIgnoreRule.ip_address == event.src_ip)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ignore rule already exists for {event.src_ip}"
+        )
+
+    # Create new ignore rule
+    new_rule = ThreatIgnoreRule(
+        ip_address=event.src_ip,
+        description=f"Quick-ignore from event {event_id}",
+        ignore_high=ignore_high,
+        ignore_medium=ignore_medium,
+        ignore_low=ignore_low,
+        match_source=True,
+        match_destination=False,
+        enabled=True
+    )
+
+    db.add(new_rule)
+    await db.commit()
+    await db.refresh(new_rule)
+
+    return IgnoreRuleResponse.model_validate(new_rule)
 
 
 @router.get("/ip/{ip_address}")

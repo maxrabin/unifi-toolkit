@@ -162,6 +162,7 @@ class ThreatStatsResponse(BaseModel):
     events_7d: int
     blocked_count: int
     alert_count: int
+    ignored_count: int = 0
 
     by_severity: List[SeverityCount]
     by_category: List[CategoryCount]
@@ -262,6 +263,61 @@ class WebhookResponse(BaseModel):
 class WebhooksListResponse(BaseModel):
     """Response model for list of webhooks"""
     webhooks: List[WebhookResponse]
+    total: int
+
+
+# Ignore Rule Models
+
+class IgnoreRuleCreate(BaseModel):
+    """Request model for creating an ignore rule"""
+    ip_address: str
+    description: Optional[str] = None
+    ignore_high: bool = False
+    ignore_medium: bool = True
+    ignore_low: bool = True
+    match_source: bool = True
+    match_destination: bool = False
+    enabled: bool = True
+
+
+class IgnoreRuleUpdate(BaseModel):
+    """Request model for updating an ignore rule"""
+    ip_address: Optional[str] = None
+    description: Optional[str] = None
+    ignore_high: Optional[bool] = None
+    ignore_medium: Optional[bool] = None
+    ignore_low: Optional[bool] = None
+    match_source: Optional[bool] = None
+    match_destination: Optional[bool] = None
+    enabled: Optional[bool] = None
+
+
+class IgnoreRuleResponse(BaseModel):
+    """Response model for ignore rule information"""
+    id: int
+    ip_address: str
+    description: Optional[str] = None
+    ignore_high: bool
+    ignore_medium: bool
+    ignore_low: bool
+    match_source: bool
+    match_destination: bool
+    enabled: bool
+    created_at: datetime
+    events_ignored: int
+    last_matched: Optional[datetime] = None
+
+    @field_serializer('created_at', 'last_matched')
+    def serialize_dt(self, dt: Optional[datetime], _info) -> Optional[str]:
+        return serialize_datetime(dt)
+
+    class Config:
+        from_attributes = True
+
+
+class IgnoreRulesListResponse(BaseModel):
+    """Response model for list of ignore rules"""
+    rules: List[IgnoreRuleResponse]
     total: int
 
 

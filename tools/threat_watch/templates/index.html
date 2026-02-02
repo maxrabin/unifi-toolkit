@@ -40,6 +40,10 @@
                     <span class="label">Last 24h:</span>
                     <span x-text="events24h"></span>
                 </span>
+                <span class="status-item">
+                    <span class="label">Ignored:</span>
+                    <span x-text="stats.ignoredCount"></span>
+                </span>
             </div>
         </header>
 
@@ -134,6 +138,9 @@
             <button class="tab" :class="{ active: activeTab === 'categories' }" @click="activeTab = 'categories'">
                 Categories
             </button>
+            <button class="tab" :class="{ active: activeTab === 'ignore' }" @click="activeTab = 'ignore'">
+                Ignore List
+            </button>
         </div>
 
         <!-- Main Content -->
@@ -173,6 +180,10 @@
                                placeholder="🔍 Search signatures, IPs..."
                                class="search-input">
                     </div>
+                    <label class="filter-checkbox">
+                        <input type="checkbox" x-model="filters.includeIgnored" @change="loadEvents(); loadStats()">
+                        Show Ignored
+                    </label>
                 </div>
 
                 <!-- Events Table -->
@@ -300,6 +311,61 @@
                         <div class="category-item" @click="filterByCategory(cat.category)">
                             <div class="category-name" x-text="cat.category"></div>
                             <div class="category-count" x-text="cat.count"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Ignore List Tab -->
+            <div x-show="activeTab === 'ignore'">
+                <div class="ignore-list-header">
+                    <div>
+                        <h2 style="margin-bottom: 0.5rem;">Ignore List</h2>
+                        <p class="subtitle">Configure IP addresses to ignore for specific severity levels. Useful for filtering noise from known devices like Home Assistant or other internal services.</p>
+                    </div>
+                    <button @click="resetIgnoreRuleForm(); showAddIgnoreRule = true" class="btn btn-primary">
+                        + Add Ignore Rule
+                    </button>
+                </div>
+
+                <div x-show="ignoreRules.length === 0" class="empty-state">
+                    No ignore rules configured. Events from all sources will be displayed.
+                </div>
+
+                <div x-show="ignoreRules.length > 0" class="ignore-rules-list">
+                    <template x-for="rule in ignoreRules" :key="rule.id">
+                        <div class="ignore-rule-item" :class="{ 'rule-disabled': !rule.enabled }">
+                            <div class="ignore-rule-content">
+                                <div class="ignore-rule-info">
+                                    <div class="ignore-rule-header">
+                                        <code class="ignore-rule-ip" x-text="rule.ip_address"></code>
+                                        <span x-show="rule.description" class="ignore-rule-desc" x-text="' — ' + rule.description"></span>
+                                        <span x-show="!rule.enabled" class="badge badge-disabled">Disabled</span>
+                                    </div>
+                                    <div class="ignore-severities">
+                                        <span>Ignoring:</span>
+                                        <span x-show="rule.ignore_high" class="severity-badge severity-high">High</span>
+                                        <span x-show="rule.ignore_medium" class="severity-badge severity-medium">Medium</span>
+                                        <span x-show="rule.ignore_low" class="severity-badge severity-low">Low</span>
+                                    </div>
+                                    <div class="ignore-match-info">
+                                        Match:
+                                        <span x-show="rule.match_source">Source IP</span>
+                                        <span x-show="rule.match_source && rule.match_destination"> / </span>
+                                        <span x-show="rule.match_destination">Destination IP</span>
+                                    </div>
+                                    <div class="ignore-rule-stats">
+                                        <span x-text="rule.events_ignored + ' events ignored'"></span>
+                                        <span x-show="rule.last_matched">
+                                            • Last matched: <span x-text="formatDateTime(rule.last_matched)"></span>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="ignore-rule-actions">
+                                    <button @click="editIgnoreRule(rule)" class="btn btn-sm btn-secondary">Edit</button>
+                                    <button @click="deleteIgnoreRule(rule.id)" class="btn btn-sm btn-danger">Delete</button>
+                                </div>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -443,6 +509,14 @@
                             🔎 Shodan
                         </a>
                     </div>
+
+                    <!-- Add to Ignore List -->
+                    <div x-show="eventDetails?.src_ip" class="ignore-action">
+                        <button @click="openIgnoreFromEvent()" class="btn btn-secondary">
+                            🚫 Add to Ignore List
+                        </button>
+                        <small>Ignore future events from this source IP</small>
+                    </div>
                 </div>
             </div>
         </div>
@@ -571,6 +645,87 @@
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary">Save Webhook</button>
                             <button type="button" @click="showAddWebhook = false; showEditWebhook = false" class="btn btn-secondary">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add/Edit Ignore Rule Modal -->
+        <div x-show="showAddIgnoreRule || showEditIgnoreRule"
+             @click.self="showAddIgnoreRule = false; showEditIgnoreRule = false"
+             class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 x-text="showEditIgnoreRule ? 'Edit Ignore Rule' : 'Add Ignore Rule'"></h2>
+                    <button @click="showAddIgnoreRule = false; showEditIgnoreRule = false" class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <form @submit.prevent="saveIgnoreRule()">
+                        <div class="form-group">
+                            <label for="ignore_ip">IP Address</label>
+                            <input type="text"
+                                   id="ignore_ip"
+                                   x-model="ignoreRuleForm.ip_address"
+                                   required
+                                   placeholder="192.168.1.100"
+                                   pattern="^(\d{1,3}\.){3}\d{1,3}$"
+                                   title="Enter a valid IPv4 address">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="ignore_description">Description (optional)</label>
+                            <input type="text"
+                                   id="ignore_description"
+                                   x-model="ignoreRuleForm.description"
+                                   placeholder="Home Assistant, Pi-hole, etc.">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Ignore Events at Severity:</label>
+                            <div class="severity-checkboxes">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" x-model="ignoreRuleForm.ignore_high">
+                                    <span class="severity-badge severity-high">High</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" x-model="ignoreRuleForm.ignore_medium">
+                                    <span class="severity-badge severity-medium">Medium</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" x-model="ignoreRuleForm.ignore_low">
+                                    <span class="severity-badge severity-low">Low</span>
+                                </label>
+                            </div>
+                            <small>Only events at checked severity levels will be ignored from this IP</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Match IP When It Is The:</label>
+                            <div>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" x-model="ignoreRuleForm.match_source">
+                                    Source IP (traffic FROM this device)
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" x-model="ignoreRuleForm.match_destination">
+                                    Destination IP (traffic TO this device)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" x-model="ignoreRuleForm.enabled">
+                                Enabled
+                            </label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Save Rule</button>
+                            <button type="button" @click="showAddIgnoreRule = false; showEditIgnoreRule = false" class="btn btn-secondary">
                                 Cancel
                             </button>
                         </div>

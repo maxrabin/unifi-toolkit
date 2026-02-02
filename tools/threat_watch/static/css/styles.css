@@ -916,6 +916,155 @@ code {
     color: var(--text-primary);
 }
 
+/* Filter checkbox in filter bar */
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.filter-checkbox:hover {
+    color: var(--text-primary);
+}
+
+.filter-checkbox input {
+    cursor: pointer;
+}
+
+/* Ignore List Styles */
+.ignore-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.ignore-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.ignore-rule-item {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface);
+    transition: all 0.2s;
+}
+
+.ignore-rule-item:hover {
+    border-color: var(--primary-color);
+}
+
+.ignore-rule-item.rule-disabled {
+    opacity: 0.6;
+    background: var(--background);
+}
+
+.ignore-rule-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.ignore-rule-info {
+    flex: 1;
+}
+
+.ignore-rule-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.ignore-rule-ip {
+    font-size: 1.1rem;
+    font-weight: 600;
+    background: var(--background);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.ignore-rule-desc {
+    color: var(--text-secondary);
+}
+
+.badge-disabled {
+    background: var(--secondary-color);
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.ignore-severities {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.ignore-match-info {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.ignore-rule-stats {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.ignore-rule-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* Severity checkboxes in ignore rule form */
+.severity-checkboxes {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+.severity-checkboxes .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0;
+}
+
+/* Ignore action in event details modal */
+.ignore-action {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.ignore-action small {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
 /* Footer */
 .app-footer {
     text-align: center;

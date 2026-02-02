@@ -16,7 +16,7 @@ from shared.crypto import decrypt_password, decrypt_api_key
 from shared.config import get_settings
 from shared.websocket_manager import get_ws_manager
 from shared.webhooks import deliver_webhook
-from tools.threat_watch.database import ThreatEvent, ThreatWebhookConfig
+from tools.threat_watch.database import ThreatEvent, ThreatWebhookConfig, ThreatIgnoreRule
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +283,59 @@ async def trigger_threat_webhooks(
             logger.error(f"Error triggering webhook {webhook.name}: {e}")
 
 
+async def check_ignore_rules(session: AsyncSession, event_data: dict) -> tuple[bool, int | None]:
+    """
+    Check if an event should be ignored based on configured rules.
+
+    Args:
+        session: Database session
+        event_data: Parsed event data
+
+    Returns:
+        Tuple of (should_ignore, rule_id) - rule_id is None if not ignored
+    """
+    src_ip = event_data.get('src_ip')
+    dest_ip = event_data.get('dest_ip')
+    severity = event_data.get('severity') or 3  # Default to low
+
+    # Get all enabled ignore rules
+    result = await session.execute(
+        select(ThreatIgnoreRule).where(ThreatIgnoreRule.enabled == True)
+    )
+    rules = result.scalars().all()
+
+    for rule in rules:
+        ip_match = False
+
+        # Check source IP match
+        if rule.match_source and src_ip == rule.ip_address:
+            ip_match = True
+        # Check destination IP match
+        if rule.match_destination and dest_ip == rule.ip_address:
+            ip_match = True
+
+        if not ip_match:
+            continue
+
+        # Check severity match
+        should_ignore = False
+        if severity == 1 and rule.ignore_high:
+            should_ignore = True
+        elif severity == 2 and rule.ignore_medium:
+            should_ignore = True
+        elif severity == 3 and rule.ignore_low:
+            should_ignore = True
+
+        if should_ignore:
+            # Update rule stats
+            rule.events_ignored += 1
+            rule.last_matched = datetime.now(timezone.utc)
+            logger.debug(f"Event matched ignore rule {rule.id} ({rule.ip_address})")
+            return True, rule.id
+
+    return False, None
+
+
 async def refresh_threat_events():
     """
     Background task that polls for new IDS/IPS events
@@ -362,6 +415,7 @@ async def refresh_threat_events():
 
                 # Process and store new events
                 new_count = 0
+                ignored_count = 0
                 for raw_event in raw_events:
                     event_data = parse_unifi_event(raw_event)
 
@@ -374,12 +428,23 @@ async def refresh_threat_events():
                     if existing.scalar_one_or_none():
                         continue  # Skip duplicate
 
-                    # Create new event
-                    new_event = ThreatEvent(**event_data)
+                    # Check ignore rules
+                    should_ignore, ignore_rule_id = await check_ignore_rules(session, event_data)
+
+                    # Create new event with ignored flag
+                    new_event = ThreatEvent(
+                        **event_data,
+                        ignored=should_ignore,
+                        ignored_by_rule_id=ignore_rule_id
+                    )
                     session.add(new_event)
                     new_count += 1
 
-                    # Trigger webhooks for high-severity events
+                    if should_ignore:
+                        ignored_count += 1
+                        continue  # Skip webhooks for ignored events
+
+                    # Trigger webhooks only for non-ignored events
                     action = event_data.get('action') or 'alert'
                     await trigger_threat_webhooks(session, event_data, action)
 
@@ -387,7 +452,10 @@ async def refresh_threat_events():
                 _last_refresh = datetime.now(timezone.utc)
 
                 if new_count > 0:
-                    logger.info(f"Stored {new_count} new threat events")
+                    if ignored_count > 0:
+                        logger.info(f"Stored {new_count} new threat events ({ignored_count} ignored)")
+                    else:
+                        logger.info(f"Stored {new_count} new threat events")
 
                     # Broadcast update via WebSocket
                     ws_manager = get_ws_manager()
