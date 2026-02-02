@@ -4,7 +4,7 @@ All notable changes to UI Toolkit will be documented in this file.
 
 ## [1.8.6] - 2026-02-02
 
-### Threat Watch v0.3.0
+### Threat Watch v0.4.0
 
 #### Fixed
 - **Network 10.x support** - Fixed Threat Watch not displaying any IPS events on UniFi Network 10.x. Ubiquiti moved IPS events from the legacy `stat/ips/event` endpoint to a new v2 `traffic-flows` API. Threat Watch now tries the v2 API first and falls back to legacy for older firmware. (#10)
