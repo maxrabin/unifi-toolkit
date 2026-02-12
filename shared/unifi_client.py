@@ -24,6 +24,7 @@ IDS_IPS_SUPPORTED_MODELS = {
     "UDMSE",        # UDM SE
     "UDR",          # UDR (Dream Router)
     "UDR7",         # UDR7 (Dream Router 7)
+    "UDMA67A",      # UDR7 (Dream Router 7 - actual API model code)
     "UDW",          # UDW (Dream Wall)
     # UXG series (Next-Gen Gateway)
     "UXG",          # UXG Lite (model code is just "UXG" not "UXGLITE")
@@ -54,6 +55,7 @@ UNIFI_MODEL_NAMES = {
     "UDMSE": "UDM SE",
     "UDR": "UDR",
     "UDR7": "Dream Router 7",
+    "UDMA67A": "Dream Router 7",
     "UDW": "UDW",
     # UXG series - Note: "UXG" is the model code for UXG Lite
     "UXG": "UXG Lite",
@@ -77,6 +79,7 @@ UNIFI_MODEL_NAMES = {
     "UXBSDM": "UniFi Express",
     # Access Points
     "U7PROMAX": "U7 Pro Max",
+    "UAPA6A4": "U7 Pro XGS",
     "U7PRO": "U7 Pro",
     "U7PIW": "U7 Pro Wall",
     "U7LR": "U7 LR",
